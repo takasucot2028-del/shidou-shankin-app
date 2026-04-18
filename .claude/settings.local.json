@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --check C:/Users/JHUSER17/Desktop/shidou-shankin-app/js/config.js)"
+    ]
+  }
+}

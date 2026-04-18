@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>指導月報入力 | 指導謝金管理システム</title>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/report.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <h1 class="header-title">指導月報入力</h1>
+    <span class="header-badge">部活動地域展開 指導謝金管理</span>
+  </div>
+</header>
+
+<main class="main">
+
+  <!-- ========== 入力フォーム ========== -->
+  <div id="form-section" class="container">
+
+    <!-- 基本情報 -->
+    <section class="card">
+      <h2 class="section-title">基本情報</h2>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="instructor-name">指導者氏名 <span class="required">*</span></label>
+          <select id="instructor-name" required>
+            <option value="">選択してください</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="club-name">クラブ名</label>
+          <input type="text" id="club-name" readonly placeholder="指導者選択で自動入力">
+        </div>
+        <div class="form-group">
+          <label>対象年月 <span class="required">*</span></label>
+          <div class="date-select-group">
+            <select id="target-year" aria-label="対象年"></select>
+            <span>年</span>
+            <select id="target-month" aria-label="対象月"></select>
+            <span>月</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 指導記録 -->
+    <section class="card">
+      <div class="section-header">
+        <h2 class="section-title">指導記録</h2>
+        <button type="button" id="add-row-btn" class="btn btn-secondary btn-sm">＋ 行追加</button>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="report-table" id="report-table">
+          <colgroup>
+            <col class="col-date">
+            <col class="col-category">
+            <col class="col-rate">
+            <col class="col-time">
+            <col class="col-time">
+            <col class="col-hours">
+            <col class="col-transport">
+            <col class="col-destination">
+            <col class="col-travel">
+            <col class="col-note">
+            <col class="col-action">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>日付</th>
+              <th>区分</th>
+              <th>時給区分</th>
+              <th>開始</th>
+              <th>終了</th>
+              <th>指導時間</th>
+              <th>交通手段</th>
+              <th>行先</th>
+              <th>旅費(円)</th>
+              <th>備考</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="report-tbody">
+            <!-- JS で生成 -->
+          </tbody>
+        </table>
+      </div>
+
+      <div class="totals">
+        <div class="total-item">
+          <span class="total-label">合計指導時間</span>
+          <span class="total-value" id="total-hours">0時間00分</span>
+        </div>
+        <div class="total-item">
+          <span class="total-label">旅費合計</span>
+          <span class="total-value" id="total-travel">¥0</span>
+        </div>
+        <div class="total-item highlight">
+          <span class="total-label">謝金（概算）</span>
+          <span class="total-value" id="total-fee">¥0</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="action-buttons">
+      <button type="button" id="save-btn" class="btn btn-secondary">一時保存</button>
+      <button type="button" id="submit-btn" class="btn btn-primary">確認・提出する</button>
+    </div>
+  </div>
+
+  <!-- ========== 提出確認画面 ========== -->
+  <div id="confirm-section" class="container hidden">
+    <section class="card">
+      <h2 class="section-title">提出確認</h2>
+      <p class="confirm-note">以下の内容で提出します。提出後は修正できません。内容をご確認ください。</p>
+
+      <div id="confirm-summary" class="confirm-info-grid"></div>
+
+      <div class="fee-preview card-inner">
+        <h3>謝金計算結果（概算）</h3>
+        <div id="fee-preview-content"></div>
+      </div>
+    </section>
+
+    <div class="action-buttons">
+      <button type="button" id="back-btn" class="btn btn-secondary">← 戻って修正する</button>
+      <button type="button" id="confirm-submit-btn" class="btn btn-primary">提出する</button>
+    </div>
+  </div>
+
+  <!-- ========== 完了画面 ========== -->
+  <div id="complete-section" class="container hidden">
+    <section class="card text-center">
+      <div class="complete-icon">✓</div>
+      <h2 class="section-title">提出が完了しました</h2>
+      <p id="complete-message"></p>
+      <div class="action-buttons" style="justify-content:center;">
+        <button type="button" id="new-report-btn" class="btn btn-primary">新しい月報を入力する</button>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<div id="loading" class="loading hidden">
+  <div class="loading-spinner"></div>
+  <p>処理中...</p>
+</div>
+<div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+<script src="js/config.js"></script>
+<script src="js/report.js"></script>
+</body>
+</html>

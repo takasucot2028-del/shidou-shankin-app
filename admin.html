@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>事務局管理画面 | 指導謝金管理システム</title>
+  <link rel="stylesheet" href="css/common.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <h1 class="header-title">事務局管理画面</h1>
+    <span class="header-badge">部活動地域展開 指導謝金管理</span>
+  </div>
+</header>
+
+<main class="main">
+<div class="container">
+
+  <!-- タブナビ -->
+  <nav class="tab-nav" role="tablist">
+    <button class="tab-btn active" role="tab" aria-selected="true"  data-tab="dashboard">ダッシュボード</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" data-tab="detail">月報詳細</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" data-tab="fee">謝金計算</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" data-tab="slip">給与明細</button>
+    <button class="tab-btn"        role="tab" aria-selected="false" data-tab="master">指導者マスタ</button>
+  </nav>
+
+  <!-- ========== ダッシュボード ========== -->
+  <div id="tab-dashboard" class="tab-panel active" role="tabpanel">
+    <div class="ym-selector">
+      <label>対象年月</label>
+      <select id="db-year"></select><span>年</span>
+      <select id="db-month"></select><span>月</span>
+      <button type="button" id="db-load-btn" class="btn btn-primary btn-sm">表示</button>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card total">
+        <div class="summary-label">登録指導者数</div>
+        <div class="summary-value" id="db-total">—<small>名</small></div>
+      </div>
+      <div class="summary-card submitted">
+        <div class="summary-label">提出済</div>
+        <div class="summary-value" id="db-submitted">—<small>名</small></div>
+      </div>
+      <div class="summary-card unsubmitted">
+        <div class="summary-label">未提出</div>
+        <div class="summary-value" id="db-unsubmitted">—<small>名</small></div>
+      </div>
+      <div class="summary-card fee-total">
+        <div class="summary-label">謝金総額（概算）</div>
+        <div class="summary-value" id="db-fee-total">—</div>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2 class="section-title">提出状況一覧</h2>
+      <div class="table-wrapper">
+        <table class="data-table" id="db-status-table">
+          <thead>
+            <tr>
+              <th>指導者氏名</th>
+              <th>クラブ名</th>
+              <th>ステータス</th>
+              <th>提出日時</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="db-status-tbody">
+            <tr><td colspan="5" class="text-center text-muted">年月を選択して「表示」を押してください</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="section-title">未提出者一覧</h2>
+      <div id="db-unsubmitted-list" class="text-muted">—</div>
+    </section>
+  </div>
+
+  <!-- ========== 月報詳細 ========== -->
+  <div id="tab-detail" class="tab-panel" role="tabpanel">
+    <div class="detail-header">
+      <div class="form-group">
+        <label for="detail-instructor">指導者</label>
+        <select id="detail-instructor">
+          <option value="">選択してください</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>対象年月</label>
+        <div class="date-select-group">
+          <select id="detail-year"></select><span>年</span>
+          <select id="detail-month"></select><span>月</span>
+        </div>
+      </div>
+      <button type="button" id="detail-load-btn" class="btn btn-primary btn-sm">表示</button>
+    </div>
+
+    <div id="detail-content" class="hidden">
+      <section class="card">
+        <h2 class="section-title">月報内容</h2>
+        <div id="detail-meta" class="detail-meta"></div>
+        <div class="table-wrapper">
+          <table class="data-table" id="detail-table">
+            <thead>
+              <tr>
+                <th>日付</th><th>区分</th><th>時給区分</th>
+                <th>開始</th><th>終了</th><th>指導時間</th><th>計算時間</th>
+                <th>交通手段</th><th>行先</th><th>旅費</th><th>備考</th>
+              </tr>
+            </thead>
+            <tbody id="detail-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="section-title">謝金計算結果</h2>
+        <div id="detail-fee-result"></div>
+
+        <div class="fee-edit-form mt-16" id="fee-edit-area">
+          <div class="form-group">
+            <label>謝金総額（修正）</label>
+            <input type="number" id="edit-fee" min="0" placeholder="修正値">
+          </div>
+          <div class="form-group">
+            <label>源泉徴収額（修正）</label>
+            <input type="number" id="edit-withholding" min="0" placeholder="修正値">
+          </div>
+          <div class="form-group">
+            <label>差引支払額（修正）</label>
+            <input type="number" id="edit-net" min="0" placeholder="修正値">
+          </div>
+          <button type="button" id="save-fee-edit-btn" class="btn btn-warning btn-sm">修正を保存</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="detail-empty" class="card text-center text-muted">
+      指導者と年月を選択して「表示」を押してください
+    </div>
+  </div>
+
+  <!-- ========== 謝金計算・支払明細 ========== -->
+  <div id="tab-fee" class="tab-panel" role="tabpanel">
+    <div class="ym-selector">
+      <label>対象年月</label>
+      <select id="fee-year"></select><span>年</span>
+      <select id="fee-month"></select><span>月</span>
+      <button type="button" id="fee-load-btn" class="btn btn-primary btn-sm">計算・表示</button>
+      <button type="button" id="fee-export-btn" class="btn btn-secondary btn-sm">Sheetsへエクスポート</button>
+    </div>
+
+    <section class="card">
+      <h2 class="section-title">謝金計算結果一覧</h2>
+      <div class="fee-table-wrapper">
+        <table class="data-table" id="fee-table">
+          <thead>
+            <tr>
+              <th>指導者氏名</th>
+              <th>クラブ名</th>
+              <th>平日(h)</th>
+              <th>休日(h)</th>
+              <th>長期(h)</th>
+              <th>大会(h)</th>
+              <th>謝金総額</th>
+              <th>源泉徴収</th>
+              <th>差引支払額</th>
+              <th>旅費</th>
+              <th>修正</th>
+            </tr>
+          </thead>
+          <tbody id="fee-tbody">
+            <tr><td colspan="11" class="text-center text-muted">年月を選択して「計算・表示」を押してください</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="fee-total-bar" id="fee-total-bar" style="display:none;">
+        <div>
+          <div class="label">差引支払額 合計</div>
+          <div class="value" id="fee-total-net">¥0</div>
+        </div>
+        <div>
+          <div class="label">謝金総額</div>
+          <div class="value" id="fee-total-gross">¥0</div>
+        </div>
+        <div>
+          <div class="label">源泉徴収額 合計</div>
+          <div class="value" id="fee-total-tax">¥0</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ========== 給与明細出力 ========== -->
+  <div id="tab-slip" class="tab-panel" role="tabpanel">
+    <div class="slip-container">
+      <div class="ym-selector">
+        <div class="form-group">
+          <label for="slip-instructor">指導者</label>
+          <select id="slip-instructor">
+            <option value="">選択してください</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>対象年月</label>
+          <div class="date-select-group">
+            <select id="slip-year"></select><span>年</span>
+            <select id="slip-month"></select><span>月</span>
+          </div>
+        </div>
+        <button type="button" id="slip-preview-btn" class="btn btn-primary btn-sm">プレビュー</button>
+        <button type="button" id="slip-print-btn" class="btn btn-secondary btn-sm hidden">印刷・PDF</button>
+      </div>
+
+      <div id="slip-preview" class="hidden">
+        <div class="slip-preview" id="slip-content">
+          <!-- JS で生成 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 指導者マスタ管理 ========== -->
+  <div id="tab-master" class="tab-panel" role="tabpanel">
+    <div class="master-toolbar">
+      <div class="master-search">
+        <input type="text" id="master-search" placeholder="氏名・クラブで検索">
+        <button type="button" id="master-search-btn" class="btn btn-secondary btn-sm">検索</button>
+      </div>
+      <button type="button" id="master-add-btn" class="btn btn-primary btn-sm">＋ 指導者追加</button>
+    </div>
+
+    <section class="card">
+      <div class="table-wrapper">
+        <table class="data-table master-table" id="master-table">
+          <thead>
+            <tr>
+              <th>No</th>
+              <th>氏名</th>
+              <th>クラブ名</th>
+              <th>区分</th>
+              <th>種別</th>
+              <th>時給</th>
+              <th>メール</th>
+              <th class="col-actions">操作</th>
+            </tr>
+          </thead>
+          <tbody id="master-tbody">
+            <tr><td colspan="8" class="text-center text-muted">読み込み中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+</div><!-- /container -->
+</main>
+
+<!-- ========== 指導者マスタ モーダル ========== -->
+<div id="master-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="master-modal-title">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="master-modal-title">指導者追加</h2>
+      <button type="button" class="btn-icon" id="master-modal-close" aria-label="閉じる">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="m-name">氏名 <span class="required">*</span></label>
+          <input type="text" id="m-name" maxlength="50">
+        </div>
+        <div class="form-group">
+          <label for="m-club">クラブ名 <span class="required">*</span></label>
+          <input type="text" id="m-club" maxlength="50">
+        </div>
+        <div class="form-group">
+          <label for="m-rate-type">区分 <span class="required">*</span></label>
+          <select id="m-rate-type">
+            <option value="メイン">メイン</option>
+            <option value="サブ">サブ</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="m-type">指導者種別 <span class="required">*</span></label>
+          <select id="m-type">
+            <option value="一般">一般</option>
+            <option value="教員">教員</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="m-hourly">時給（円） <span class="required">*</span></label>
+          <input type="number" id="m-hourly" min="0" step="1" value="1600">
+        </div>
+        <div class="form-group">
+          <label for="m-email">メールアドレス</label>
+          <input type="email" id="m-email" maxlength="100">
+        </div>
+        <div class="form-group">
+          <label for="m-bank">金融機関</label>
+          <input type="text" id="m-bank" maxlength="30">
+        </div>
+        <div class="form-group">
+          <label for="m-branch">支店名</label>
+          <input type="text" id="m-branch" maxlength="30">
+        </div>
+        <div class="form-group">
+          <label for="m-account-type">口座種別</label>
+          <select id="m-account-type">
+            <option value="普通">普通</option>
+            <option value="当座">当座</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="m-account-number">口座番号</label>
+          <input type="text" id="m-account-number" maxlength="20" inputmode="numeric">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="master-modal-cancel" class="btn btn-secondary">キャンセル</button>
+      <button type="button" id="master-modal-save"   class="btn btn-primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 削除確認モーダル -->
+<div id="confirm-delete-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title">削除確認</h2>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-delete-msg"></p>
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="confirm-delete-cancel" class="btn btn-secondary">キャンセル</button>
+      <button type="button" id="confirm-delete-ok"     class="btn btn-danger">削除する</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading" class="loading hidden">
+  <div class="loading-spinner"></div>
+  <p>処理中...</p>
+</div>
+<div id="toast" class="toast" role="alert" aria-live="polite"></div>
+
+<script src="js/config.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

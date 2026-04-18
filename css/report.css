@@ -1,0 +1,255 @@
+/* ===========================
+   月報入力画面 スタイル
+   =========================== */
+
+/* ===========================
+   入力テーブル（PC）
+   =========================== */
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  table-layout: fixed;
+}
+.report-table thead th {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 700;
+  padding: 8px 6px;
+  text-align: center;
+  border-bottom: 2px solid var(--color-primary);
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+}
+.report-table tbody td {
+  padding: 5px 4px;
+  border-bottom: 1px solid var(--color-border-light);
+  vertical-align: middle;
+  text-align: center;
+}
+.report-table tbody tr:nth-child(even) td { background: #fafcff; }
+.report-table tbody tr:hover td { background: #f0f6ff; }
+
+/* 列幅 */
+.report-table col.col-date        { width: 108px; }
+.report-table col.col-category    { width: 92px; }
+.report-table col.col-rate        { width: 72px; }
+.report-table col.col-time        { width: 72px; }
+.report-table col.col-hours       { width: 68px; }
+.report-table col.col-transport   { width: 76px; }
+.report-table col.col-destination { width: 100px; }
+.report-table col.col-travel      { width: 72px; }
+.report-table col.col-note        { width: auto; }
+.report-table col.col-action      { width: 36px; }
+
+/* テーブル内インプット */
+.report-table input[type="date"],
+.report-table input[type="time"],
+.report-table input[type="number"],
+.report-table input[type="text"] {
+  height: 34px;
+  padding: 0 6px;
+  font-size: var(--font-size-xs);
+  text-align: center;
+}
+.report-table input[type="text"] { text-align: left; }
+.report-table select {
+  height: 34px;
+  padding: 0 20px 0 6px;
+  font-size: var(--font-size-xs);
+  background-position: right 6px center;
+}
+
+/* 計算時間セル */
+.hours-cell {
+  font-weight: 700;
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+}
+
+/* ===========================
+   合計エリア
+   =========================== */
+.totals {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  padding: 16px 0 4px;
+  border-top: 2px solid var(--color-border);
+  margin-top: 8px;
+}
+.total-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.total-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-sub);
+}
+.total-value {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-text);
+}
+.total-item.highlight .total-value {
+  color: var(--color-primary);
+  font-size: 22px;
+}
+
+/* ===========================
+   確認画面
+   =========================== */
+.confirm-note {
+  background: #fff8e1;
+  border-left: 4px solid var(--color-warning);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  margin-bottom: 16px;
+  color: #6b5000;
+}
+
+.confirm-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.confirm-info-item { display: flex; flex-direction: column; gap: 2px; }
+.confirm-info-label { font-size: var(--font-size-xs); color: var(--color-text-sub); }
+.confirm-info-value { font-weight: 600; }
+
+.fee-preview h3 {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--color-primary);
+}
+.fee-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: var(--font-size-sm);
+}
+.fee-row:last-child { border-bottom: none; }
+.fee-row.total {
+  font-weight: 700;
+  font-size: var(--font-size-base);
+  border-top: 2px solid var(--color-border);
+  margin-top: 4px;
+  padding-top: 8px;
+  color: var(--color-primary);
+}
+.fee-row.deduction { color: var(--color-danger); }
+.fee-row.net {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-danger);
+  border-top: 2px solid var(--color-border);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+/* ===========================
+   完了画面
+   =========================== */
+.complete-icon {
+  width: 72px;
+  height: 72px;
+  background: var(--color-success);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  color: #fff;
+  margin: 0 auto 16px;
+}
+#complete-section .section-title {
+  border: none;
+  padding-left: 0;
+  text-align: center;
+  font-size: var(--font-size-xl);
+  color: var(--color-success);
+}
+#complete-section p {
+  color: var(--color-text-sub);
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+/* ===========================
+   モバイル：カードレイアウト
+   =========================== */
+@media (max-width: 768px) {
+  /* テーブルをカード形式に変換 */
+  .report-table, .report-table thead, .report-table tbody,
+  .report-table th, .report-table td, .report-table tr {
+    display: block;
+  }
+  .report-table thead { display: none; }
+
+  .report-table tbody tr {
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    padding: 12px;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+  }
+  .report-table tbody tr:nth-child(even) td { background: transparent; }
+  .report-table tbody tr:hover td { background: transparent; }
+
+  .report-table tbody td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--color-border-light);
+    text-align: left;
+  }
+  .report-table tbody td:last-child { border-bottom: none; }
+
+  .report-table tbody td::before {
+    content: attr(data-label);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-sub);
+    width: 90px;
+    flex-shrink: 0;
+  }
+  .report-table tbody td > * { flex: 1; }
+
+  .report-table td.col-action {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    border: none;
+    padding: 0;
+  }
+  .report-table td.col-action::before { display: none; }
+
+  .report-table input[type="date"],
+  .report-table input[type="time"],
+  .report-table input[type="number"],
+  .report-table input[type="text"],
+  .report-table select {
+    height: 40px;
+    font-size: var(--font-size-base);
+  }
+
+  .totals {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .total-item.highlight .total-value { font-size: 20px; }
+}
