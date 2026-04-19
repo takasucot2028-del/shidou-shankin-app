@@ -18,6 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
   addRow();              // 最初の1行を表示
 
   document.getElementById('instructor-name').addEventListener('change', onInstructorChange);
+  document.getElementById('target-year').addEventListener('change', onYearMonthChange);
+  document.getElementById('target-month').addEventListener('change', onYearMonthChange);
   document.getElementById('add-row-btn').addEventListener('click', addRow);
   document.getElementById('save-btn').addEventListener('click', onSave);
   document.getElementById('submit-btn').addEventListener('click', onShowConfirm);
@@ -69,18 +71,97 @@ function populateInstructorSelect() {
   });
 }
 
-function onInstructorChange() {
+async function onInstructorChange() {
   const name = document.getElementById('instructor-name').value;
   const inst = State.instructors.find(i => (i['氏名'] || i.name) === name);
   State.currentInstructor = inst || null;
   document.getElementById('club-name').value = inst ? (inst['クラブ名'] || inst.clubName || '') : '';
 
-  // 全行の時給区分デフォルトを更新
   if (inst) {
     const defaultRate = inst['区分'] || inst.rateType || 'メイン';
     document.querySelectorAll('.sel-rate').forEach(sel => { sel.value = defaultRate; });
     updateTotals();
+    await loadDraftReport();
   }
+}
+
+function onYearMonthChange() {
+  loadDraftReport();
+}
+
+async function loadDraftReport() {
+  const name  = document.getElementById('instructor-name').value;
+  const year  = document.getElementById('target-year').value;
+  const month = document.getElementById('target-month').value;
+  if (!name || !year || !month) return;
+
+  showLoading();
+  try {
+    const data = await gasGet({ action: 'getReport', instructorName: name, year, month });
+    if (!data.success) throw new Error(data.error);
+
+    const drafts = (data.data || []).filter(r => r.status === '下書き');
+    if (drafts.length === 0) return;
+
+    State.submitId = drafts[0].submitId;
+    document.getElementById('report-tbody').innerHTML = '';
+    rowIndex = 0;
+    drafts.forEach(r => addRowWithData(r));
+    updateTotals();
+    showToast('下書きデータを読み込みました', 'success');
+  } catch (e) {
+    showToast('下書きの読み込みに失敗しました: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function addRowWithData(r) {
+  addRow();
+  const tbody = document.getElementById('report-tbody');
+  const tr = tbody.rows[tbody.rows.length - 1];
+
+  tr.querySelector('.inp-date').value        = parseDateStr(r.date);
+  tr.querySelector('.sel-category').value    = r.category || '平日';
+  tr.querySelector('.sel-rate').value        = r.rateType || 'メイン';
+  tr.querySelector('.inp-start').value       = parseTimeStr(r.startTime);
+  tr.querySelector('.inp-end').value         = parseTimeStr(r.endTime);
+  tr.querySelector('.sel-transport').value   = r.transport || '';
+  tr.querySelector('.inp-dest').value        = r.destination || '';
+  tr.querySelector('.inp-travel').value      = r.travelAmount || '';
+  tr.querySelector('.inp-note').value        = r.note || '';
+
+  recalcRow(tr);
+}
+
+function parseDateStr(val) {
+  if (!val) return '';
+  const s = String(val);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (s.includes('T')) return s.slice(0, 10);
+  try {
+    const d = new Date(s);
+    if (!isNaN(d)) {
+      const y  = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const dy = String(d.getDate()).padStart(2, '0');
+      return `${y}-${mo}-${dy}`;
+    }
+  } catch (_) {}
+  return s;
+}
+
+function parseTimeStr(val) {
+  if (!val) return '';
+  const s = String(val);
+  if (/^\d{2}:\d{2}$/.test(s)) return s;
+  try {
+    const d = new Date(s);
+    if (!isNaN(d)) {
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+  } catch (_) {}
+  return s;
 }
 
 // ========== 行操作 ==========
