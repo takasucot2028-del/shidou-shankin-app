@@ -367,7 +367,7 @@ function generateTransferSheet(body) {
   }
 
   let feeData = allValues.slice(1);
-  let feeRows = feeData.filter(row => row[2] === ymLabel);
+  let feeRows = feeData.filter(row => matchYearMonth(row[2], year, month));
   Logger.log('[generateTransferSheet] ymLabel="%s" でフィルタ後の件数=%s', ymLabel, feeRows.length);
 
   if (feeRows.length === 0) {
@@ -376,7 +376,7 @@ function generateTransferSheet(body) {
       return { success: false, error: '対象年月の提出済み月報がありません: ' + ymLabel };
     }
     feeData = feeSheet.getDataRange().getValues().slice(1);
-    feeRows = feeData.filter(row => row[2] === ymLabel);
+    feeRows = feeData.filter(row => matchYearMonth(row[2], year, month));
   }
 
   if (feeRows.length === 0) {
@@ -446,6 +446,45 @@ function generateTransferSheet(body) {
   return { success: true, count: outputRows.length, sheetName: '口座振替データ' };
 }
 
+// ========== 年月比較ユーティリティ ==========
+
+/**
+ * 謝金計算結果シートのC列値（対象年月）と指定の年月を比較する。
+ * - "2026年4月" 形式の文字列はそのまま比較
+ * - DateオブジェクトまたはISO文字列はgetFullYear()/getMonth()+1で比較
+ */
+function matchYearMonth(cellValue, year, month) {
+  if (!cellValue) return false;
+  // 文字列形式 "YYYY年M月"
+  if (typeof cellValue === 'string') {
+    return cellValue === year + '年' + month + '月';
+  }
+  // Dateオブジェクト（GASがセル値をDate型に変換した場合）
+  if (cellValue instanceof Date) {
+    return cellValue.getFullYear() === year && (cellValue.getMonth() + 1) === month;
+  }
+  return false;
+}
+
+/**
+ * 謝金計算結果シートのC列をDate型から文字列形式（"YYYY年M月"）に一括変換する。
+ * 既存データ修正用。Apps Scriptエディタから手動実行すること。
+ */
+function fixFeeSheetYearMonth() {
+  const sheet = getOrCreateFeeSheet();
+  const data = sheet.getDataRange().getValues();
+  let fixed = 0;
+  for (let i = 1; i < data.length; i++) {
+    const cell = data[i][2];
+    if (cell instanceof Date) {
+      const label = cell.getFullYear() + '年' + (cell.getMonth() + 1) + '月';
+      sheet.getRange(i + 1, 3).setValue(label);
+      fixed++;
+    }
+  }
+  Logger.log('fixFeeSheetYearMonth: %s 行を修正しました', fixed);
+}
+
 // ========== デバッグ用テスト関数 ==========
 
 /**
@@ -470,7 +509,7 @@ function testGenerateTransfer() {
   // 2. フィルタ確認
   const ymLabel = year + '年' + month + '月';
   Logger.log('検索する ymLabel="%s"', ymLabel);
-  const matched = allValues.slice(1).filter(row => row[2] === ymLabel);
+  const matched = allValues.slice(1).filter(row => matchYearMonth(row[2], year, month));
   Logger.log('ymLabel一致件数: %s', matched.length);
 
   // 3. generateTransferSheet を実行
