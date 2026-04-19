@@ -209,18 +209,17 @@ function timeToMinutes(timeStr) {
 // ========== シート保存・更新 ==========
 
 /**
- * 謝金計算結果シートに保存（既存レコードがあれば更新）
+ * 謝金計算結果シートに保存（同一指導者・年月の既存行を削除して再挿入）
  */
 function saveFeeResult(instructorName, year, month, result, clubName) {
   const sheet = getOrCreateFeeSheet();
-  const data = sheet.getDataRange().getValues();
   const ymLabel = year + '年' + month + '月';
 
-  // 既存レコード検索（修正フラグが立っていなければ上書き）
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][1] === instructorName && data[i][2] === ymLabel && !data[i][14]) {
-      writeFeeRow(sheet, i + 1, data[i][0], instructorName, ymLabel, result);
-      return;
+  // 既存レコードを後ろから削除してインデックスずれを防ぐ
+  const data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (data[i][1] === instructorName && data[i][2] === ymLabel) {
+      sheet.deleteRow(i + 1);
     }
   }
 
