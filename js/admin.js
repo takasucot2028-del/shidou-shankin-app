@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('detail-load-btn').addEventListener('click', loadDetail);
   document.getElementById('fee-load-btn').addEventListener('click', loadFeeResults);
   document.getElementById('fee-export-btn').addEventListener('click', exportFeeSheet);
+  document.getElementById('fee-transfer-btn').addEventListener('click', generateTransferSheet);
   document.getElementById('slip-preview-btn').addEventListener('click', previewSlip);
   document.getElementById('slip-print-btn').addEventListener('click', () => window.print());
   document.getElementById('save-fee-edit-btn').addEventListener('click', saveFeeEdit);
@@ -338,6 +339,24 @@ function renderFeeTable(data) {
 
 async function exportFeeSheet() {
   showToast('Googleスプレッドシートへエクスポートしました', 'success');
+}
+
+async function generateTransferSheet() {
+  const year  = document.getElementById('fee-year').value;
+  const month = document.getElementById('fee-month').value;
+  showLoading();
+  try {
+    const res = await gasPost({ action: 'generateTransferSheet', year, month });
+    if (res.success) {
+      showToast(`口座振替データを出力しました（${res.count}件）`, 'success');
+    } else {
+      showToast(res.error || '出力に失敗しました', 'error');
+    }
+  } catch (e) {
+    showToast('通信エラー: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
 }
 
 // ========== 給与明細 ==========

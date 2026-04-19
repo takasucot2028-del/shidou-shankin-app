@@ -76,6 +76,9 @@ function doPost(e) {
       case 'updateFee':
         result = updateFee(body);
         break;
+      case 'generateTransferSheet':
+        result = generateTransferSheet(body);
+        break;
       case 'updateReport':
         result = updateReport(body);
         break;

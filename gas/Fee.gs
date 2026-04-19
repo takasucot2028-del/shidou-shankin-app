@@ -338,3 +338,86 @@ function calcAllFees(body) {
 }
 
 // findInstructor / getInstructors / updateMaster は Master.gs に定義
+
+// ========== 口座振替データ生成 ==========
+
+/**
+ * 指定年月の謝金計算結果と指導者マスタを結合して「口座振替データ」シートを生成する
+ * body: { year, month }
+ */
+function generateTransferSheet(body) {
+  const year = parseInt(body.year);
+  const month = parseInt(body.month);
+  const ymLabel = year + '年' + month + '月';
+
+  // 謝金計算結果から対象年月の行を取得
+  const feeSheet = getOrCreateFeeSheet();
+  const feeData = feeSheet.getDataRange().getValues().slice(1);
+  const feeRows = feeData.filter(row => row[2] === ymLabel);
+
+  if (feeRows.length === 0) {
+    return { success: false, error: '対象年月の謝金計算結果がありません: ' + ymLabel };
+  }
+
+  // 指導者マスタをマップ化（氏名 → マスタ行）
+  const masterSheet = getSheet('指導者マスタ');
+  const masterData = masterSheet.getDataRange().getValues().slice(1);
+  const masterMap = {};
+  masterData.forEach(row => {
+    if (row[1]) masterMap[row[1]] = row;
+  });
+
+  // 差引支払額 > 0 の行のみ抽出・結合
+  const outputRows = [];
+  feeRows.forEach(row => {
+    const netPay = parseFloat(row[11]) || 0;
+    if (netPay <= 0) return;
+
+    const name = row[1];
+    const master = masterMap[name];
+    outputRows.push([
+      '',                          // A: No（後で連番付与）
+      name,                        // B: 指導者氏名
+      master ? master[2] : '',     // C: クラブ名
+      master ? master[3] : '',     // D: 区分
+      ymLabel,                     // E: 対象年月
+      parseFloat(row[9]) || 0,     // F: 謝金総額
+      parseFloat(row[10]) || 0,    // G: 源泉徴収額
+      netPay,                      // H: 差引支払額
+      master ? master[6] : '',     // I: 金融機関名
+      master ? master[7] : '',     // J: 支店名
+      master ? master[8] : '',     // K: 口座種別
+      master ? master[9] : '',     // L: 口座番号
+    ]);
+  });
+
+  if (outputRows.length === 0) {
+    return { success: false, error: '差引支払額が0円より大きい指導者がいません' };
+  }
+
+  // 連番付与
+  outputRows.forEach((row, i) => { row[0] = i + 1; });
+
+  // シートを取得または作成して上書き
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName('口座振替データ');
+  if (!sheet) {
+    sheet = ss.insertSheet('口座振替データ');
+  } else {
+    sheet.clearContents();
+  }
+
+  const headers = [
+    'No', '指導者氏名', 'クラブ名', '区分', '対象年月',
+    '謝金総額（円）', '源泉徴収額（円）', '差引支払額（円）',
+    '金融機関名', '支店名', '口座種別', '口座番号',
+  ];
+  sheet.appendRow(headers);
+  sheet.setFrozenRows(1);
+
+  if (outputRows.length > 0) {
+    sheet.getRange(2, 1, outputRows.length, headers.length).setValues(outputRows);
+  }
+
+  return { success: true, count: outputRows.length, sheetName: '口座振替データ' };
+}
