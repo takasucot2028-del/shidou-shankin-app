@@ -215,15 +215,15 @@ function saveFeeResult(instructorName, year, month, result, clubName) {
   const sheet = getOrCreateFeeSheet();
   const ymLabel = year + '年' + month + '月';
 
-  // 既存レコードを後ろから削除してインデックスずれを防ぐ
+  // 既存レコードを後ろから削除（matchYearMonthでDate型・文字列両対応）
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][1] === instructorName && data[i][2] === ymLabel) {
+    if (data[i][1] === instructorName && matchYearMonth(data[i][2], year, month)) {
       sheet.deleteRow(i + 1);
     }
   }
 
-  // 新規追加
+  // 新規追加（C列は必ず文字列で保存）
   const calcId = generateUUID();
   const lastRow = sheet.getLastRow() + 1;
   writeFeeRow(sheet, lastRow, calcId, instructorName, ymLabel, result);
@@ -307,6 +307,15 @@ function calcAllFees(body) {
   const names = Object.keys(nameSet);
   if (names.length === 0) {
     return { success: true, data: [], message: '対象年月に提出済み月報がありません' };
+  }
+
+  // 計算前に対象年月の既存謝金計算結果を一括削除して重複を防ぐ
+  const feeSheet = getOrCreateFeeSheet();
+  const feeData = feeSheet.getDataRange().getValues();
+  for (let i = feeData.length - 1; i >= 1; i--) {
+    if (matchYearMonth(feeData[i][2], year, month)) {
+      feeSheet.deleteRow(i + 1);
+    }
   }
 
   const results = [];
@@ -483,6 +492,57 @@ function fixFeeSheetYearMonth() {
     }
   }
   Logger.log('fixFeeSheetYearMonth: %s 行を修正しました', fixed);
+}
+
+// ========== 重複データクリーンアップ ==========
+
+/**
+ * 謝金計算結果シートの重複行を削除する。
+ * 同一の指導者氏名・対象年月の組み合わせは計算日時が最新の1件だけ残す。
+ * 戻り値: { deleted: 削除件数, kept: 残存件数 }
+ */
+function cleanupFeeResults() {
+  const sheet = getOrCreateFeeSheet();
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) return { deleted: 0, kept: 0 };
+
+  // キー(氏名+年月) → 最新行インデックス(1-based)を収集
+  const latestRow = {}; // key → { rowIndex, calcDate }
+  for (let i = 1; i < data.length; i++) {
+    const name = data[i][1];
+    const ymRaw = data[i][2];
+    const calcDate = data[i][13] instanceof Date ? data[i][13] : new Date(data[i][13] || 0);
+    const key = name + '|' + (ymRaw instanceof Date
+      ? ymRaw.getFullYear() + '年' + (ymRaw.getMonth() + 1) + '月'
+      : String(ymRaw));
+    if (!latestRow[key] || calcDate > latestRow[key].calcDate) {
+      latestRow[key] = { rowIndex: i + 1, calcDate };
+    }
+  }
+
+  const keepRows = new Set(Object.values(latestRow).map(v => v.rowIndex));
+
+  // 後ろから削除してインデックスずれを防ぐ
+  let deleted = 0;
+  for (let i = data.length; i >= 2; i--) {
+    if (!keepRows.has(i)) {
+      sheet.deleteRow(i);
+      deleted++;
+    }
+  }
+
+  return { deleted, kept: keepRows.size };
+}
+
+/**
+ * Apps Scriptエディタから手動実行して重複データを一括削除する。
+ * 実行後はログで削除件数を確認すること。
+ */
+function runCleanupFeeResults() {
+  Logger.log('=== runCleanupFeeResults 開始 ===');
+  const result = cleanupFeeResults();
+  Logger.log('削除件数: %s, 残存件数: %s', result.deleted, result.kept);
+  Logger.log('=== runCleanupFeeResults 完了 ===');
 }
 
 // ========== デバッグ用テスト関数 ==========
