@@ -294,8 +294,10 @@ function exportSheet(params) {
     .filter(row => {
       if (!year && !month) return true;
       const ym = String(row[2]); // 対象年月 "YYYY年MM月"
-      if (year && !ym.includes(String(year))) return false;
-      if (month && !ym.includes(String(month) + '月')) return false;
+      // 年月両方ある場合は完全一致で判定（"1月"が"11月"に誤マッチするのを防ぐ）
+      if (year && month) return ym === String(year) + '年' + String(month) + '月';
+      if (year)  return ym.startsWith(String(year) + '年');
+      if (month) return ym === String(month) + '月' || ym.endsWith('年' + String(month) + '月');
       return true;
     })
     .map(row => {

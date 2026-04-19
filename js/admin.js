@@ -335,10 +335,27 @@ async function previewSlip() {
 
   showLoading();
   try {
-    // 謝金データ取得
-    const feeRes = await gasGet({ action: 'exportSheet', year, month });
-    const feeRow = (feeRes.data || []).find(r => r['指導者氏名'] === name);
-    if (!feeRow) { showToast('謝金計算データが見つかりません。先に謝金計算タブで計算してください。', 'error'); return; }
+    // calcFeeで計算＆保存し、結果を直接受け取る
+    const feeRes = await gasPost({ action: 'calcFee', instructorName: name, year: parseInt(year), month: parseInt(month) });
+    if (!feeRes.success) {
+      showToast('謝金計算データが取得できません: ' + (feeRes.error || '月報が提出されていない可能性があります'), 'error');
+      return;
+    }
+
+    const r = feeRes.result;
+    // renderSlip / buildSlipDetailRows が期待するキー形式に変換
+    const feeRow = {
+      '謝金総額':             r.fee,
+      '源泉徴収額':           r.withholding,
+      '差引支払額':           r.netPay,
+      '旅費総額':             r.travelTotal,
+      'メイン単価適用時間':   r.mainCalcHours,
+      'サブ単価適用時間':     r.subCalcHours,
+      '平日謝金計算時間':     (r.categoryHours && r.categoryHours['平日'])     || 0,
+      '休日謝金計算時間':     (r.categoryHours && r.categoryHours['休日'])     || 0,
+      '長期休暇謝金計算時間': (r.categoryHours && r.categoryHours['長期休暇']) || 0,
+      '大会引率謝金計算時間': (r.categoryHours && r.categoryHours['大会引率']) || 0,
+    };
 
     // 指導者マスタ
     const inst = AdminState.instructors.find(i => (i['氏名'] || i.name) === name) || {};
