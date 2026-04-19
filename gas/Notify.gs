@@ -165,11 +165,11 @@ function getOrCreateNotifyLogSheet() {
 // ========== URL・署名ヘルパー ==========
 
 function getReportUrl() {
-  return PropertiesService.getScriptProperties().getProperty('REPORT_URL') || 'https://example.com/report';
+  return PropertiesService.getScriptProperties().getProperty('REPORT_URL') || 'https://takasucot2028-del.github.io/shidou-shankin-app/';
 }
 
 function getAdminUrl() {
-  return PropertiesService.getScriptProperties().getProperty('ADMIN_URL') || 'https://example.com/admin';
+  return PropertiesService.getScriptProperties().getProperty('ADMIN_URL') || 'https://takasucot2028-del.github.io/shidou-shankin-app/admin.html';
 }
 
 function getOrgSignature() {
