@@ -264,9 +264,12 @@ async function loadFeeResults() {
   const month = document.getElementById('fee-month').value;
   showLoading();
   try {
-    const res = await gasGet({ action: 'exportSheet', year, month });
+    const res = await gasPost({ action: 'calcAllFees', year: parseInt(year), month: parseInt(month) });
     if (!res.success) throw new Error(res.error);
     AdminState.feeResults = res.data || [];
+    if (AdminState.feeResults.length === 0) {
+      showToast(res.message || '提出済みの月報がありません', 'error');
+    }
     renderFeeTable(AdminState.feeResults);
   } catch (e) {
     showToast('謝金データの取得に失敗しました: ' + e.message, 'error');
@@ -288,13 +291,13 @@ function renderFeeTable(data) {
   const totalTax   = data.reduce((s, r) => s + (Number(r['源泉徴収額']) || 0), 0);
   const totalNet   = data.reduce((s, r) => s + (Number(r['差引支払額']) || 0), 0);
 
-  // 指導者名とクラブ名を指導者マスタから補完
   tbody.innerHTML = data.map(r => {
     const inst = AdminState.instructors.find(i => (i['氏名'] || i.name) === r['指導者氏名']) || {};
+    const clubName = inst['クラブ名'] || inst.clubName || r['クラブ名'] || '';
     return `
     <tr>
       <td>${esc(r['指導者氏名'] || '')}</td>
-      <td>${esc(inst['クラブ名'] || inst.clubName || '')}</td>
+      <td>${esc(clubName)}</td>
       <td class="text-right">${r['平日謝金計算時間'] || 0}</td>
       <td class="text-right">${r['休日謝金計算時間'] || 0}</td>
       <td class="text-right">${r['長期休暇謝金計算時間'] || 0}</td>

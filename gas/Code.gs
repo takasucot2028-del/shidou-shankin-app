@@ -70,6 +70,9 @@ function doPost(e) {
       case 'calcFee':
         result = calcFee(body);
         break;
+      case 'calcAllFees':
+        result = calcAllFees(body);
+        break;
       case 'updateFee':
         result = updateFee(body);
         break;

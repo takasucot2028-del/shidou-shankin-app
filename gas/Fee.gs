@@ -282,4 +282,60 @@ function updateCalcHoursInSheet(sheet, submitId, date, calcHours) {
   }
 }
 
+// ========== 全指導者一括謝金計算 ==========
+
+/**
+ * 指定年月の提出済み月報がある全指導者の謝金を計算・保存して返す
+ * body: { year, month }
+ */
+function calcAllFees(body) {
+  const year = parseInt(body.year);
+  const month = parseInt(body.month);
+
+  const reportSheet = getOrCreateReportSheet(year);
+  const reportData = reportSheet.getDataRange().getValues().slice(1);
+
+  // 対象年月・提出済みの指導者名を重複なく収集
+  const nameSet = {};
+  reportData.forEach(row => {
+    if (parseInt(row[COL.YEAR]) === year &&
+        parseInt(row[COL.MONTH]) === month &&
+        row[COL.STATUS] === '提出済') {
+      nameSet[row[COL.INSTRUCTOR_NAME]] = true;
+    }
+  });
+
+  const names = Object.keys(nameSet);
+  if (names.length === 0) {
+    return { success: true, data: [], message: '対象年月に提出済み月報がありません' };
+  }
+
+  const results = [];
+  names.forEach(name => {
+    try {
+      const res = calcFee({ instructorName: name, year, month });
+      if (res.success) {
+        const instructor = findInstructor(name) || {};
+        results.push({
+          '指導者氏名': name,
+          'クラブ名': instructor.clubName || '',
+          '平日謝金計算時間': res.result.categoryHours['平日'] || 0,
+          '休日謝金計算時間': res.result.categoryHours['休日'] || 0,
+          '長期休暇謝金計算時間': res.result.categoryHours['長期休暇'] || 0,
+          '大会引率謝金計算時間': res.result.categoryHours['大会引率'] || 0,
+          '謝金総額': res.result.fee,
+          '源泉徴収額': res.result.withholding,
+          '差引支払額': res.result.netPay,
+          '旅費総額': res.result.travelTotal,
+          '修正フラグ': false,
+        });
+      }
+    } catch (e) {
+      // 個別エラーはスキップして続行
+    }
+  });
+
+  return { success: true, data: results };
+}
+
 // findInstructor / getInstructors / updateMaster は Master.gs に定義
