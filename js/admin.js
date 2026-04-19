@@ -344,9 +344,13 @@ async function exportFeeSheet() {
 async function generateTransferSheet() {
   const year  = document.getElementById('fee-year').value;
   const month = document.getElementById('fee-month').value;
+  console.log('[generateTransferSheet] fee-year element value:', year, '(type:', typeof year, ')');
+  console.log('[generateTransferSheet] fee-month element value:', month, '(type:', typeof month, ')');
+  console.log('[generateTransferSheet] GASに送るペイロード:', { action: 'generateTransferSheet', year, month });
   showLoading();
   try {
     const res = await gasPost({ action: 'generateTransferSheet', year, month });
+    console.log('[generateTransferSheet] GASレスポンス:', res);
     if (res.success) {
       showToast(`口座振替データを出力しました（${res.count}件）`, 'success');
     } else {

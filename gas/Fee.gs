@@ -350,10 +350,25 @@ function generateTransferSheet(body) {
   const month = parseInt(body.month);
   const ymLabel = year + '年' + month + '月';
 
+  Logger.log('[generateTransferSheet] 受信パラメータ: body.year=%s, body.month=%s', body.year, body.month);
+  Logger.log('[generateTransferSheet] parseInt後: year=%s, month=%s', year, month);
+  Logger.log('[generateTransferSheet] フィルタ用 ymLabel="%s"', ymLabel);
+
   // 謝金計算結果から対象年月の行を取得（なければ自動計算して再取得）
   const feeSheet = getOrCreateFeeSheet();
-  let feeData = feeSheet.getDataRange().getValues().slice(1);
+  const allValues = feeSheet.getDataRange().getValues();
+  Logger.log('[generateTransferSheet] 謝金計算結果シート 総行数(ヘッダー含む)=%s', allValues.length);
+  if (allValues.length > 0) {
+    Logger.log('[generateTransferSheet] 1行目(ヘッダー): %s', JSON.stringify(allValues[0]));
+  }
+  if (allValues.length > 1) {
+    Logger.log('[generateTransferSheet] 2行目(データ): %s', JSON.stringify(allValues[1]));
+    Logger.log('[generateTransferSheet] 2行目C列(対象年月)の値="%s", type=%s', allValues[1][2], typeof allValues[1][2]);
+  }
+
+  let feeData = allValues.slice(1);
   let feeRows = feeData.filter(row => row[2] === ymLabel);
+  Logger.log('[generateTransferSheet] ymLabel="%s" でフィルタ後の件数=%s', ymLabel, feeRows.length);
 
   if (feeRows.length === 0) {
     const calcResult = calcAllFees({ year: year, month: month });
@@ -429,4 +444,36 @@ function generateTransferSheet(body) {
   }
 
   return { success: true, count: outputRows.length, sheetName: '口座振替データ' };
+}
+
+// ========== デバッグ用テスト関数 ==========
+
+/**
+ * Apps Scriptエディタから手動実行して口座振替シート生成をテストする
+ * ★ 実行前に year / month を実際のデータに合わせて変更すること
+ */
+function testGenerateTransfer() {
+  const year  = 2026; // ← テストしたい年に変更
+  const month = 4;    // ← テストしたい月に変更
+
+  Logger.log('=== testGenerateTransfer 開始: year=%s, month=%s ===', year, month);
+
+  // 1. 謝金計算結果シートの全データを確認
+  const feeSheet = getOrCreateFeeSheet();
+  const allValues = feeSheet.getDataRange().getValues();
+  Logger.log('謝金計算結果シート 総行数(ヘッダー含む): %s', allValues.length);
+  if (allValues.length > 0) Logger.log('ヘッダー行: %s', JSON.stringify(allValues[0]));
+  for (let i = 1; i < Math.min(allValues.length, 6); i++) {
+    Logger.log('データ行%s: C列(対象年月)="%s", 全体=%s', i, allValues[i][2], JSON.stringify(allValues[i]));
+  }
+
+  // 2. フィルタ確認
+  const ymLabel = year + '年' + month + '月';
+  Logger.log('検索する ymLabel="%s"', ymLabel);
+  const matched = allValues.slice(1).filter(row => row[2] === ymLabel);
+  Logger.log('ymLabel一致件数: %s', matched.length);
+
+  // 3. generateTransferSheet を実行
+  const result = generateTransferSheet({ year: year, month: month });
+  Logger.log('=== generateTransferSheet 結果: %s ===', JSON.stringify(result));
 }
