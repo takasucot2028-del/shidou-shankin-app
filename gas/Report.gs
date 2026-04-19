@@ -177,6 +177,47 @@ function submitReport(body) {
   return { success: true, submitId };
 }
 
+// ========== 月報修正（事務局） ==========
+
+/**
+ * 事務局による月報修正（提出済みデータを上書き・謝金再計算）
+ * body: { instructorName, clubName, year, month, submitId, rows: [...] }
+ */
+function updateReport(body) {
+  validateReportBody(body);
+
+  const year = parseInt(body.year);
+  const month = parseInt(body.month);
+  const sheet = getOrCreateReportSheet(year);
+
+  deleteReportRows(sheet, body.instructorName, year, month, '提出済');
+  deleteReportRows(sheet, body.instructorName, year, month, '下書き');
+
+  const now = new Date();
+  const submitId = body.submitId || generateUUID();
+
+  const newRows = (body.rows || []).map(r => buildRow(r, {
+    submitId,
+    instructorName: body.instructorName,
+    clubName: body.clubName,
+    year,
+    month,
+    status: '提出済',
+    submittedAt: body.submittedAt || now,
+    updatedAt: now,
+  }));
+
+  if (newRows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
+      .setValues(newRows);
+  }
+
+  SpreadsheetApp.flush();
+  calcFee({ instructorName: body.instructorName, year, month });
+
+  return { success: true, submitId };
+}
+
 // ========== ダッシュボードデータ取得 ==========
 
 /**

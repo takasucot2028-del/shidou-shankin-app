@@ -283,6 +283,34 @@
 .master-table .col-actions { width: 110px; text-align: center; }
 
 /* ===========================
+   月報修正モーダル
+   =========================== */
+.modal-wide {
+  max-width: 960px;
+}
+
+.report-edit-table input,
+.report-edit-table select {
+  height: 34px;
+  padding: 0 6px;
+  font-size: var(--font-size-xs);
+  min-width: 60px;
+}
+.report-edit-table input[type="date"]   { min-width: 118px; }
+.report-edit-table input[type="time"]   { min-width: 82px; }
+.report-edit-table input[type="number"] { min-width: 64px; }
+.report-edit-table .edit-inp-dest       { min-width: 80px; }
+.report-edit-table .edit-inp-note       { min-width: 80px; }
+.report-edit-table .edit-inp-hours      { min-width: 80px; }
+
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+/* ===========================
    印刷スタイル
    =========================== */
 @media print {

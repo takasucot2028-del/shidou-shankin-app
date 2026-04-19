@@ -139,6 +139,10 @@
           <button type="button" id="save-fee-edit-btn" class="btn btn-warning btn-sm">修正を保存</button>
         </div>
       </section>
+
+      <div class="action-buttons">
+        <button type="button" id="report-edit-btn" class="btn btn-warning">月報を修正する</button>
+      </div>
     </div>
 
     <div id="detail-empty" class="card text-center text-muted">
@@ -342,6 +346,36 @@
     <div class="modal-footer">
       <button type="button" id="confirm-delete-cancel" class="btn btn-secondary">キャンセル</button>
       <button type="button" id="confirm-delete-ok"     class="btn btn-danger">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 月報修正モーダル -->
+<div id="report-edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="report-edit-modal-title">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <h2 class="modal-title" id="report-edit-modal-title">月報修正</h2>
+      <button type="button" class="btn-icon" id="report-edit-modal-close" aria-label="閉じる">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="report-edit-meta" class="detail-meta mb-16"></div>
+      <div class="table-wrapper">
+        <table class="data-table report-edit-table" id="report-edit-table">
+          <thead>
+            <tr>
+              <th>日付</th><th>区分</th><th>時給区分</th>
+              <th>開始</th><th>終了</th><th>指導時間</th>
+              <th>交通手段</th><th>行先</th><th>旅費(円)</th><th>備考</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="report-edit-tbody"></tbody>
+        </table>
+      </div>
+      <button type="button" id="report-edit-add-row-btn" class="btn btn-secondary btn-sm mt-8">＋ 行を追加</button>
+    </div>
+    <div class="modal-footer">
+      <button type="button" id="report-edit-cancel-btn" class="btn btn-secondary">キャンセル</button>
+      <button type="button" id="report-edit-save-btn" class="btn btn-warning">修正を保存する</button>
     </div>
   </div>
 </div>

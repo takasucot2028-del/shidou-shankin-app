@@ -4,11 +4,14 @@
 
 // ========== 状態 ==========
 const AdminState = {
-  instructors:  [],
-  feeResults:   [],
-  currentCalcId: null,
-  deleteTarget:  null,
-  editingName:   null, // マスタ編集中の氏名
+  instructors:       [],
+  feeResults:        [],
+  currentCalcId:     null,
+  deleteTarget:      null,
+  editingName:       null,       // マスタ編集中の氏名
+  currentDetailRows: [],         // loadDetail で取得した生データ
+  editRowIndex:      0,
+  editInstructorType: '一般',   // 月報修正時の指導者種別
 };
 
 // ========== 初期化 ==========
@@ -37,6 +40,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('confirm-delete-modal').classList.add('hidden');
   });
   document.getElementById('confirm-delete-ok').addEventListener('click', confirmDeleteInstructor);
+
+  document.getElementById('report-edit-btn').addEventListener('click', openReportEdit);
+  document.getElementById('report-edit-modal-close').addEventListener('click', closeReportEdit);
+  document.getElementById('report-edit-cancel-btn').addEventListener('click', closeReportEdit);
+  document.getElementById('report-edit-add-row-btn').addEventListener('click', () => addEditRow());
+  document.getElementById('report-edit-save-btn').addEventListener('click', saveReportEdit);
 });
 
 // ========== 年月セレクト初期化 ==========
@@ -173,6 +182,9 @@ async function loadDetail() {
       document.getElementById('detail-empty').textContent = '該当する月報データが見つかりません';
       return;
     }
+
+    // 生データを保存（月報修正で使用）
+    AdminState.currentDetailRows = res.data;
 
     // メタ情報
     const first = res.data[0];
@@ -685,6 +697,240 @@ async function confirmDeleteInstructor() {
     await loadMasterTable();
   } catch (e) {
     showToast('削除に失敗しました: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+// ========== 月報修正 ==========
+
+function openReportEdit() {
+  const rows = AdminState.currentDetailRows;
+  if (!rows || rows.length === 0) {
+    showToast('月報データがありません。先に「表示」を押してください。', 'error');
+    return;
+  }
+
+  const first = rows[0];
+  const inst = AdminState.instructors.find(i => (i['氏名'] || i.name) === first.instructorName) || {};
+  AdminState.editInstructorType = inst['指導者種別'] || inst.type || '一般';
+
+  document.getElementById('report-edit-meta').innerHTML = `
+    <div class="detail-meta-item"><span class="detail-meta-label">指導者</span><span class="detail-meta-value">${esc(first.instructorName)}</span></div>
+    <div class="detail-meta-item"><span class="detail-meta-label">クラブ名</span><span class="detail-meta-value">${esc(first.clubName)}</span></div>
+    <div class="detail-meta-item"><span class="detail-meta-label">対象年月</span><span class="detail-meta-value">${first.year}年${first.month}月</span></div>
+    <div class="detail-meta-item"><span class="detail-meta-label">指導者種別</span><span class="detail-meta-value">${esc(AdminState.editInstructorType)}</span></div>
+  `;
+
+  document.getElementById('report-edit-tbody').innerHTML = '';
+  AdminState.editRowIndex = 0;
+  rows.forEach(r => addEditRow(r));
+
+  document.getElementById('report-edit-modal').classList.remove('hidden');
+}
+
+function closeReportEdit() {
+  document.getElementById('report-edit-modal').classList.add('hidden');
+}
+
+function addEditRow(data = null) {
+  const tbody = document.getElementById('report-edit-tbody');
+  if (tbody.rows.length >= 31) {
+    showToast('1ヶ月の最大行数（31行）に達しました', 'warning');
+    return;
+  }
+
+  const id = 'edit-row-' + (AdminState.editRowIndex++);
+  const tr = document.createElement('tr');
+  tr.id = id;
+  tr.innerHTML = `
+    <td><input type="date" class="edit-inp-date" aria-label="日付"></td>
+    <td>
+      <select class="edit-sel-category" aria-label="区分">
+        <option value="平日">平日</option>
+        <option value="休日">休日</option>
+        <option value="長期休暇">長期休暇</option>
+        <option value="大会引率">大会引率</option>
+      </select>
+    </td>
+    <td>
+      <select class="edit-sel-rate" aria-label="時給区分">
+        <option value="メイン">メイン</option>
+        <option value="サブ">サブ</option>
+      </select>
+    </td>
+    <td><input type="time" class="edit-inp-start" aria-label="開始時刻"></td>
+    <td><input type="time" class="edit-inp-end" aria-label="終了時刻"></td>
+    <td><input type="text" class="edit-inp-hours" readonly placeholder="自動" aria-label="指導時間"></td>
+    <td>
+      <select class="edit-sel-transport" aria-label="交通手段">
+        <option value="">なし</option>
+        <option value="バス代">バス代</option>
+        <option value="JR代">JR代</option>
+      </select>
+    </td>
+    <td><input type="text" class="edit-inp-dest" placeholder="行先" aria-label="行先"></td>
+    <td><input type="number" class="edit-inp-travel" min="0" step="1" placeholder="0" aria-label="旅費金額"></td>
+    <td><input type="text" class="edit-inp-note" placeholder="任意" aria-label="備考"></td>
+    <td><button type="button" class="btn-icon edit-delete-row-btn" title="削除" aria-label="削除">✕</button></td>
+  `;
+
+  if (data) {
+    tr.querySelector('.edit-inp-date').value     = parseAdminDateStr(data.date);
+    tr.querySelector('.edit-sel-category').value  = data.category || '平日';
+    tr.querySelector('.edit-sel-rate').value      = data.rateType || 'メイン';
+    tr.querySelector('.edit-inp-start').value     = parseAdminTimeStr(data.startTime);
+    tr.querySelector('.edit-inp-end').value       = parseAdminTimeStr(data.endTime);
+    tr.querySelector('.edit-sel-transport').value = data.transport || '';
+    tr.querySelector('.edit-inp-dest').value      = data.destination || '';
+    tr.querySelector('.edit-inp-travel').value    = data.travelAmount || '';
+    tr.querySelector('.edit-inp-note').value      = data.note || '';
+    recalcEditRow(tr);
+  }
+
+  tr.querySelector('.edit-inp-start').addEventListener('change', () => recalcEditRow(tr));
+  tr.querySelector('.edit-inp-end').addEventListener('change',   () => recalcEditRow(tr));
+  tr.querySelector('.edit-sel-category').addEventListener('change', () => recalcEditRow(tr));
+  tr.querySelector('.edit-delete-row-btn').addEventListener('click', () => {
+    if (document.getElementById('report-edit-tbody').rows.length > 1) {
+      tr.remove();
+    } else {
+      showToast('最低1行は必要です', 'warning');
+    }
+  });
+
+  tbody.appendChild(tr);
+}
+
+function recalcEditRow(tr) {
+  const start    = tr.querySelector('.edit-inp-start').value;
+  const end      = tr.querySelector('.edit-inp-end').value;
+  const category = tr.querySelector('.edit-sel-category').value;
+  const hours    = calcAdminInstructionHours(start, end, category, AdminState.editInstructorType);
+  const inp      = tr.querySelector('.edit-inp-hours');
+  inp.value          = hours > 0 ? formatAdminHours(hours) : '';
+  inp.dataset.hours  = hours;
+}
+
+function calcAdminInstructionHours(startTime, endTime, category, instructorType) {
+  const startMin = adminTimeToMinutes(startTime);
+  const endMin   = adminTimeToMinutes(endTime);
+  if (startMin === null || endMin === null || endMin <= startMin) return 0;
+
+  let effectiveMin;
+  const isTeacher     = instructorType === '教員';
+  const isWeekdayLike = category === '平日' || category === '長期休暇';
+
+  if (isTeacher && isWeekdayLike) {
+    const effectiveStart = Math.max(startMin, Config.TEACHER_WORK_END_MINUTES);
+    effectiveMin = Math.max(endMin - effectiveStart, 0);
+  } else {
+    effectiveMin = endMin - startMin;
+  }
+
+  const maxMin     = (Config.MAX_HOURS[category] || 0) * 60;
+  const cappedMin  = Math.min(effectiveMin, maxMin);
+  const flooredMin = Math.floor(cappedMin / 15) * 15;
+  return flooredMin / 60;
+}
+
+function adminTimeToMinutes(t) {
+  if (!t) return null;
+  const [h, m] = t.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
+
+function formatAdminHours(h) {
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return hh + '時間' + String(mm).padStart(2, '0') + '分';
+}
+
+function parseAdminDateStr(val) {
+  if (!val) return '';
+  const s = String(val);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (s.includes('T')) return s.slice(0, 10);
+  try {
+    const d = new Date(s);
+    if (!isNaN(d)) {
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    }
+  } catch (_) {}
+  return s;
+}
+
+function parseAdminTimeStr(val) {
+  if (!val) return '';
+  const s = String(val);
+  if (/^\d{2}:\d{2}$/.test(s)) return s;
+  try {
+    const d = new Date(s);
+    if (!isNaN(d)) {
+      return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    }
+  } catch (_) {}
+  return s;
+}
+
+async function saveReportEdit() {
+  if (!confirm('月報データを上書きします。よろしいですか？')) return;
+
+  const rows = AdminState.currentDetailRows;
+  if (!rows || rows.length === 0) return;
+  const first = rows[0];
+
+  const editRows = [];
+  document.querySelectorAll('#report-edit-tbody tr').forEach(tr => {
+    const date  = tr.querySelector('.edit-inp-date')?.value;
+    const start = tr.querySelector('.edit-inp-start')?.value;
+    const end   = tr.querySelector('.edit-inp-end')?.value;
+    if (!date && !start && !end) return;
+
+    const category = tr.querySelector('.edit-sel-category')?.value || '平日';
+    const calcH    = calcAdminInstructionHours(start, end, category, AdminState.editInstructorType);
+
+    editRows.push({
+      date,
+      category,
+      rateType:         tr.querySelector('.edit-sel-rate')?.value || 'メイン',
+      startTime:        start,
+      endTime:          end,
+      instructionHours: parseFloat(tr.querySelector('.edit-inp-hours')?.dataset.hours || 0) || 0,
+      calcHours:        calcH,
+      transport:        tr.querySelector('.edit-sel-transport')?.value || '',
+      destination:      tr.querySelector('.edit-inp-dest')?.value || '',
+      travelAmount:     parseFloat(tr.querySelector('.edit-inp-travel')?.value || 0) || 0,
+      note:             tr.querySelector('.edit-inp-note')?.value || '',
+    });
+  });
+
+  if (editRows.length === 0) {
+    showToast('1件以上の記録を入力してください', 'error');
+    return;
+  }
+
+  showLoading();
+  try {
+    const res = await gasPost({
+      action:         'updateReport',
+      submitId:       first.submitId,
+      instructorName: first.instructorName,
+      clubName:       first.clubName,
+      year:           parseInt(first.year),
+      month:          parseInt(first.month),
+      submittedAt:    first.submittedAt,
+      rows:           editRows,
+    });
+    if (!res.success) throw new Error(res.error);
+    showToast('月報を修正し、謝金を再計算しました', 'success');
+    closeReportEdit();
+    loadDetail();
+  } catch (e) {
+    showToast('修正に失敗しました: ' + e.message, 'error');
   } finally {
     hideLoading();
   }

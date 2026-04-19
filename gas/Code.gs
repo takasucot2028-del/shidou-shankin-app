@@ -76,6 +76,9 @@ function doPost(e) {
       case 'updateFee':
         result = updateFee(body);
         break;
+      case 'updateReport':
+        result = updateReport(body);
+        break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }
