@@ -56,7 +56,9 @@ function sendReminderEmails(daysBeforeDeadline) {
 
   if (!dashboard.success) return;
 
-  const deadline = targetYear + '年' + adjustedMonth + '月5日';
+  // 締切は当月5日（提出対象は前月分）
+  const deadlineMonth = now.getMonth() + 1; // 1-indexed 当月
+  const deadline = year + '年' + deadlineMonth + '月5日';
   const daysText = daysBeforeDeadline ? '提出期限' + daysBeforeDeadline + '日前' : '提出期限当日';
 
   dashboard.unsubmittedList.forEach(item => {

@@ -69,6 +69,28 @@ function createMonthlyTrigger(funcName, day, hour) {
     .create();
 }
 
+// ========== 手動実行用ヘルパー ==========
+
+/**
+ * 手動実行・緊急送信用リマインド
+ * GASエディタから直接実行してテストや緊急対応に使用する
+ * @param {number} daysBeforeDeadline - 締切までの残日数（省略時は2）
+ */
+function sendReminder(daysBeforeDeadline) {
+  const days = (daysBeforeDeadline != null) ? daysBeforeDeadline : 2;
+  sendReminderEmails(days);
+  console.log('リマインドメール送信完了（締切' + days + '日前）');
+}
+
+/**
+ * 手動実行・緊急送信用 事務局未提出者通知
+ * GASエディタから直接実行してテストや緊急対応に使用する
+ */
+function sendAdminUnsubmittedNotice() {
+  notifyAdminUnsubmitted();
+  console.log('事務局への未提出者通知送信完了');
+}
+
 // ========== トリガー削除 ==========
 
 /**
