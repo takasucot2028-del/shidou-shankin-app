@@ -185,11 +185,22 @@ function calcInstructionHours(startTime, endTime, category, instructorType) {
 }
 
 /**
- * "HH:MM" を分に変換する
+ * 時刻値を分に変換する
+ * GASはシートの時刻セルをDateオブジェクト・小数・"HH:MM"文字列のいずれかで返すため全形式に対応する
  */
 function timeToMinutes(timeStr) {
-  if (!timeStr) return null;
-  const str = String(timeStr);
+  if (timeStr === null || timeStr === undefined || timeStr === '') return null;
+  // Dateオブジェクト（GASがシートの時刻セルを変換した場合）
+  if (timeStr instanceof Date) {
+    return timeStr.getHours() * 60 + timeStr.getMinutes();
+  }
+  const str = String(timeStr).trim();
+  // 小数フォーマット（例: 0.375 = 09:00、Sheetsの内部時刻表現）
+  const num = parseFloat(str);
+  if (!isNaN(num) && num >= 0 && num < 1) {
+    return Math.round(num * 24 * 60);
+  }
+  // "HH:MM" 文字列
   const match = str.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return null;
   return parseInt(match[1]) * 60 + parseInt(match[2]);

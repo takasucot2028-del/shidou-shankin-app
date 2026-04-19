@@ -154,7 +154,8 @@ function submitReport(body) {
       .setValues(newRows);
   }
 
-  // 謝金計算を自動実行
+  // setValuesのバッファをシートにコミットしてから謝金計算を実行
+  SpreadsheetApp.flush();
   calcFee({ instructorName: body.instructorName, year, month });
 
   // 事務局へ提出通知メール
