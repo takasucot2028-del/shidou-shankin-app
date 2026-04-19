@@ -245,6 +245,12 @@ select {
 }
 .btn-success:hover { background: #218838; }
 
+.btn-warning {
+  background: var(--color-warning);
+  color: #fff;
+}
+.btn-warning:hover { background: #e09800; }
+
 .btn-sm {
   min-height: 32px;
   height: 32px;

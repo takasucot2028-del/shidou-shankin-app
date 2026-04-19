@@ -8,6 +8,7 @@ const State = {
   currentInstructor: null,
   submitId: null,        // 下書きID（初回保存時に取得）
   rows: [],              // 入力行データのキャッシュ（提出確認用）
+  isSubmitted: false,    // 提出済みデータ表示中フラグ
 };
 
 // ========== 初期化 ==========
@@ -26,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('back-btn').addEventListener('click', showFormSection);
   document.getElementById('confirm-submit-btn').addEventListener('click', onConfirmSubmit);
   document.getElementById('new-report-btn').addEventListener('click', resetForm);
+  document.getElementById('resubmit-btn').addEventListener('click', onResubmit);
 });
 
 function initYearMonth() {
@@ -95,25 +97,40 @@ async function loadDraftReport() {
   const month = document.getElementById('target-month').value;
   if (!name || !year || !month) return;
 
+  State.isSubmitted = false;
+  updateSubmitButtonsUI();
+
   showLoading();
   try {
     const data = await gasGet({ action: 'getReport', instructorName: name, year, month });
-    console.log('[loadDraftReport] API response:', data);
     if (!data.success) throw new Error(data.error);
 
-    const drafts = (data.data || []).filter(r => (r.status || '').trim() === '下書き');
-    console.log('[loadDraftReport] 全行数:', (data.data || []).length, '下書き行数:', drafts.length);
-    if (drafts.length === 0) return;
+    const allRows   = data.data || [];
+    const submitted = allRows.filter(r => (r.status || '').trim() === '提出済');
+    const drafts    = allRows.filter(r => (r.status || '').trim() === '下書き');
 
-    State.submitId = drafts[0].submitId;
-    document.getElementById('report-tbody').innerHTML = '';
-    rowIndex = 0;
-    drafts.forEach(r => addRowWithData(r));
-    updateTotals();
-    showToast('下書きデータを読み込みました', 'success');
+    if (submitted.length > 0) {
+      State.submitId    = submitted[0].submitId;
+      State.isSubmitted = true;
+      document.getElementById('report-tbody').innerHTML = '';
+      rowIndex = 0;
+      submitted.forEach(r => addRowWithData(r));
+      updateTotals();
+      updateSubmitButtonsUI();
+      showToast('提出済みデータを読み込みました', 'info');
+    } else if (drafts.length > 0) {
+      State.submitId    = drafts[0].submitId;
+      State.isSubmitted = false;
+      document.getElementById('report-tbody').innerHTML = '';
+      rowIndex = 0;
+      drafts.forEach(r => addRowWithData(r));
+      updateTotals();
+      updateSubmitButtonsUI();
+      showToast('下書きデータを読み込みました', 'success');
+    }
   } catch (e) {
     console.error('[loadDraftReport] エラー:', e);
-    showToast('下書きの読み込みに失敗しました: ' + e.message, 'error');
+    showToast('データの読み込みに失敗しました: ' + e.message, 'error');
   } finally {
     hideLoading();
   }
@@ -514,12 +531,30 @@ function resetForm() {
   State.currentInstructor = null;
   State.submitId = null;
   State.rows = [];
+  State.isSubmitted = false;
   rowIndex = 0;
   addRow();
   updateTotals();
+  updateSubmitButtonsUI();
   document.getElementById('complete-section').classList.add('hidden');
   document.getElementById('form-section').classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function updateSubmitButtonsUI() {
+  const submitted = State.isSubmitted;
+  document.getElementById('save-btn').classList.toggle('hidden', submitted);
+  document.getElementById('submit-btn').classList.toggle('hidden', submitted);
+  document.getElementById('resubmit-btn').classList.toggle('hidden', !submitted);
+  document.getElementById('submitted-notice').classList.toggle('hidden', !submitted);
+}
+
+function onResubmit() {
+  if (!validate()) return;
+  if (!confirm('提出済みのデータを上書きします。よろしいですか？')) return;
+  State.isSubmitted = false;
+  updateSubmitButtonsUI();
+  onShowConfirm();
 }
 
 // ========== GAS 通信 ==========

@@ -143,11 +143,8 @@ function submitReport(body) {
   const month = parseInt(body.month);
   const sheet = getOrCreateReportSheet(year);
 
-  // 既に提出済みなら二重提出エラー
-  if (hasSubmittedReport(sheet, body.instructorName, year, month)) {
-    return { success: false, error: 'すでに提出済みです' };
-  }
-
+  // 既存の提出済み行を削除（再提出を許可）
+  deleteReportRows(sheet, body.instructorName, year, month, '提出済');
   // 下書き行を削除
   deleteReportRows(sheet, body.instructorName, year, month, '下書き');
 
