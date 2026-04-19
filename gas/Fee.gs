@@ -350,10 +350,19 @@ function generateTransferSheet(body) {
   const month = parseInt(body.month);
   const ymLabel = year + '年' + month + '月';
 
-  // 謝金計算結果から対象年月の行を取得
+  // 謝金計算結果から対象年月の行を取得（なければ自動計算して再取得）
   const feeSheet = getOrCreateFeeSheet();
-  const feeData = feeSheet.getDataRange().getValues().slice(1);
-  const feeRows = feeData.filter(row => row[2] === ymLabel);
+  let feeData = feeSheet.getDataRange().getValues().slice(1);
+  let feeRows = feeData.filter(row => row[2] === ymLabel);
+
+  if (feeRows.length === 0) {
+    const calcResult = calcAllFees({ year: year, month: month });
+    if (!calcResult.success || calcResult.data.length === 0) {
+      return { success: false, error: '対象年月の提出済み月報がありません: ' + ymLabel };
+    }
+    feeData = feeSheet.getDataRange().getValues().slice(1);
+    feeRows = feeData.filter(row => row[2] === ymLabel);
+  }
 
   if (feeRows.length === 0) {
     return { success: false, error: '対象年月の謝金計算結果がありません: ' + ymLabel };
