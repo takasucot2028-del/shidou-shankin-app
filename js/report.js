@@ -98,9 +98,11 @@ async function loadDraftReport() {
   showLoading();
   try {
     const data = await gasGet({ action: 'getReport', instructorName: name, year, month });
+    console.log('[loadDraftReport] API response:', data);
     if (!data.success) throw new Error(data.error);
 
-    const drafts = (data.data || []).filter(r => r.status === '下書き');
+    const drafts = (data.data || []).filter(r => (r.status || '').trim() === '下書き');
+    console.log('[loadDraftReport] 全行数:', (data.data || []).length, '下書き行数:', drafts.length);
     if (drafts.length === 0) return;
 
     State.submitId = drafts[0].submitId;
@@ -110,6 +112,7 @@ async function loadDraftReport() {
     updateTotals();
     showToast('下書きデータを読み込みました', 'success');
   } catch (e) {
+    console.error('[loadDraftReport] エラー:', e);
     showToast('下書きの読み込みに失敗しました: ' + e.message, 'error');
   } finally {
     hideLoading();

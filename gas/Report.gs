@@ -56,21 +56,37 @@ function rowToReport(row) {
     clubName: row[COL.CLUB_NAME],
     year: row[COL.YEAR],
     month: row[COL.MONTH],
-    date: row[COL.DATE],
+    date: sheetDateToString(row[COL.DATE]),
     category: row[COL.CATEGORY],
     rateType: row[COL.RATE_TYPE],
-    startTime: row[COL.START_TIME],
-    endTime: row[COL.END_TIME],
+    startTime: sheetTimeToString(row[COL.START_TIME]),
+    endTime: sheetTimeToString(row[COL.END_TIME]),
     instructionHours: row[COL.INSTRUCTION_HOURS],
     calcHours: row[COL.CALC_HOURS],
     transport: row[COL.TRANSPORT],
     destination: row[COL.DESTINATION],
     travelAmount: row[COL.TRAVEL_AMOUNT],
     note: row[COL.NOTE],
-    status: row[COL.STATUS],
+    status: String(row[COL.STATUS] || '').trim(),
     submittedAt: row[COL.SUBMITTED_AT],
     updatedAt: row[COL.UPDATED_AT],
   };
+}
+
+function sheetDateToString(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(val);
+}
+
+function sheetTimeToString(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, Session.getScriptTimeZone(), 'HH:mm');
+  }
+  return String(val);
 }
 
 // ========== 月報一時保存 ==========
