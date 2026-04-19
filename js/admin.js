@@ -373,9 +373,81 @@ async function previewSlip() {
   }
 }
 
+// ========== 支払予定日計算 ==========
+
+function nthMonday(year, month, n) {
+  const d = new Date(year, month - 1, 1);
+  let count = 0;
+  while (true) {
+    if (d.getDay() === 1) { count++; if (count === n) return d.getDate(); }
+    d.setDate(d.getDate() + 1);
+  }
+}
+
+function calcShunbun(year) {
+  return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+
+function calcShubun(year) {
+  return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+
+function getJPHolidays(year) {
+  const set = new Set();
+  const add = (m, d) => set.add(new Date(year, m - 1, d).toDateString());
+
+  add(1, 1);
+  add(2, 11);
+  if (year >= 2020) add(2, 23);
+  add(3, calcShunbun(year));
+  add(4, 29);
+  add(5, 3); add(5, 4); add(5, 5);
+  add(8, 11);
+  add(9, calcShubun(year));
+  add(11, 3);
+  add(11, 23);
+
+  add(1,  nthMonday(year, 1,  2));
+  add(7,  nthMonday(year, 7,  3));
+  add(9,  nthMonday(year, 9,  3));
+  add(10, nthMonday(year, 10, 2));
+
+  // 振替休日：祝日が日曜なら翌月曜（既存祝日と重なれば更に翌日）
+  const base = new Set(set);
+  base.forEach(ds => {
+    const d = new Date(ds);
+    if (d.getDay() === 0) {
+      const sub = new Date(d);
+      sub.setDate(sub.getDate() + 1);
+      while (set.has(sub.toDateString())) sub.setDate(sub.getDate() + 1);
+      set.add(sub.toDateString());
+    }
+  });
+
+  return set;
+}
+
+/**
+ * 月報対象月に対する支払予定日を返す（翌月10日、土日祝の場合は前の平日）
+ */
+function calcPaymentDate(reportYear, reportMonth) {
+  let y = reportYear, m = reportMonth + 1;
+  if (m > 12) { m = 1; y++; }
+
+  const holidays = getJPHolidays(y);
+  const date = new Date(y, m - 1, 10);
+
+  while (date.getDay() === 0 || date.getDay() === 6 || holidays.has(date.toDateString())) {
+    date.setDate(date.getDate() - 1);
+  }
+  return date;
+}
+
+// ========== 給与明細レンダリング ==========
+
 function renderSlip(inst, fee, year, month) {
   const today    = new Date();
-  const payDate  = new Date(year, month, 20); // 翌月20日払い想定
+  const payDate  = calcPaymentDate(year, month);
   const instrName   = inst['氏名'] || inst.name || '';
   const clubName    = inst['クラブ名'] || inst.clubName || '';
   const rateType    = inst['区分'] || inst.rateType || '';

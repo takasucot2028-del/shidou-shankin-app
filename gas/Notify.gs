@@ -162,6 +162,87 @@ function getOrCreateNotifyLogSheet() {
   return sheet;
 }
 
+// ========== 支払予定日計算 ==========
+
+/**
+ * 月報対象月に対する支払予定日を返す（翌月10日、土日祝なら前の平日）
+ * @param {number} reportYear
+ * @param {number} reportMonth
+ * @return {Date}
+ */
+function calcPaymentDate(reportYear, reportMonth) {
+  let y = reportYear, m = reportMonth + 1;
+  if (m > 12) { m = 1; y++; }
+
+  const holidays = getJPHolidaySet(y);
+  const date = new Date(y, m - 1, 10);
+
+  while (date.getDay() === 0 || date.getDay() === 6 || holidays.has(dateKey(date))) {
+    date.setDate(date.getDate() - 1);
+  }
+  return date;
+}
+
+function dateKey(d) {
+  return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+
+/**
+ * 指定年の日本の祝日Setを返す（dateKey形式）
+ */
+function getJPHolidaySet(year) {
+  const set = new Set();
+  const add = (m, d) => set.add(year + '-' + m + '-' + d);
+
+  add(1, 1);
+  add(2, 11);
+  if (year >= 2020) add(2, 23);
+  add(3, calcShunbunDay(year));
+  add(4, 29);
+  add(5, 3); add(5, 4); add(5, 5);
+  add(8, 11);
+  add(9, calcShubunDay(year));
+  add(11, 3);
+  add(11, 23);
+
+  add(1,  nthMondayDay(year, 1,  2));
+  add(7,  nthMondayDay(year, 7,  3));
+  add(9,  nthMondayDay(year, 9,  3));
+  add(10, nthMondayDay(year, 10, 2));
+
+  // 振替休日
+  const base = new Set(set);
+  base.forEach(function(key) {
+    const parts = key.split('-');
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    if (d.getDay() === 0) {
+      const sub = new Date(d);
+      sub.setDate(sub.getDate() + 1);
+      while (set.has(dateKey(sub))) sub.setDate(sub.getDate() + 1);
+      set.add(dateKey(sub));
+    }
+  });
+
+  return set;
+}
+
+function calcShunbunDay(year) {
+  return Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+
+function calcShubunDay(year) {
+  return Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+}
+
+function nthMondayDay(year, month, n) {
+  const d = new Date(year, month - 1, 1);
+  let count = 0;
+  while (true) {
+    if (d.getDay() === 1) { count++; if (count === n) return d.getDate(); }
+    d.setDate(d.getDate() + 1);
+  }
+}
+
 // ========== URL・署名ヘルパー ==========
 
 function getReportUrl() {
