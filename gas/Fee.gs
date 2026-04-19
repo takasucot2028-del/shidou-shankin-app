@@ -28,11 +28,14 @@ const TEACHER_WORK_END_MINUTES = 16 * 60 + 45;
 /**
  * 謝金計算を実行してシートに保存する
  * body: { instructorName, year, month }
+ * skipDelete=true の場合、シート上の既存行削除をスキップする（calcAllFees から呼ぶ場合）
  */
-function calcFee(body) {
+function calcFee(body, skipDelete) {
   const year = parseInt(body.year);
   const month = parseInt(body.month);
   const instructorName = body.instructorName;
+
+  Logger.log('[calcFee] 開始: 指導者="%s", year=%s, month=%s, skipDelete=%s', instructorName, year, month, !!skipDelete);
 
   // 月報データを取得
   const reportSheet = getOrCreateReportSheet(year);
@@ -40,11 +43,13 @@ function calcFee(body) {
 
   // 対象指導者・年月・提出済みの行を絞り込む
   const rows = reportData.filter(row =>
-    row[COL.INSTRUCTOR_NAME] === instructorName &&
+    String(row[COL.INSTRUCTOR_NAME]).trim() === String(instructorName).trim() &&
     parseInt(row[COL.YEAR]) === year &&
     parseInt(row[COL.MONTH]) === month &&
     row[COL.STATUS] === '提出済'
   );
+
+  Logger.log('[calcFee] 対象月報行数: %s', rows.length);
 
   if (rows.length === 0) {
     return { success: false, error: '対象の提出済み月報が見つかりません' };
@@ -57,7 +62,7 @@ function calcFee(body) {
   }
 
   const result = computeFee(rows, instructor);
-  saveFeeResult(instructorName, year, month, result, instructor.clubName);
+  saveFeeResult(instructorName, year, month, result, instructor.clubName, skipDelete);
 
   return { success: true, result };
 }
@@ -210,22 +215,34 @@ function timeToMinutes(timeStr) {
 
 /**
  * 謝金計算結果シートに保存（同一指導者・年月の既存行を削除して再挿入）
+ * skipDelete=true の場合、削除をスキップして挿入のみ行う（calcAllFees の pre-delete 後に使用）
  */
-function saveFeeResult(instructorName, year, month, result, clubName) {
+function saveFeeResult(instructorName, year, month, result, clubName, skipDelete) {
   const sheet = getOrCreateFeeSheet();
   const ymLabel = year + '年' + month + '月';
 
-  // 既存レコードを後ろから削除（matchYearMonthでDate型・文字列両対応）
-  const data = sheet.getDataRange().getValues();
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][1] === instructorName && matchYearMonth(data[i][2], year, month)) {
-      sheet.deleteRow(i + 1);
+  if (skipDelete) {
+    Logger.log('[saveFeeResult] 削除スキップ（呼び出し元で一括削除済）: 指導者="%s", 年月="%s"', instructorName, ymLabel);
+  } else {
+    // 既存レコードを後ろから削除
+    // Date型・ISO文字列・"YYYY年M月"文字列・数値シリアルすべてに対応
+    const data = sheet.getDataRange().getValues();
+    let deletedCount = 0;
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][1]).trim() === String(instructorName).trim() &&
+          matchYearMonth(data[i][2], year, month)) {
+        Logger.log('[saveFeeResult] 削除: row=%s, 氏名="%s", 年月セル値="%s"', i + 1, data[i][1], data[i][2]);
+        sheet.deleteRow(i + 1);
+        deletedCount++;
+      }
     }
+    Logger.log('[saveFeeResult] 削除完了: 指導者="%s", 年月="%s", 削除件数=%s', instructorName, ymLabel, deletedCount);
   }
 
-  // 新規追加（C列は必ず文字列で保存）
+  // 新規挿入（C列はテキスト形式を強制してSheetsの日付自動変換を防ぐ）
   const calcId = generateUUID();
   const lastRow = sheet.getLastRow() + 1;
+  Logger.log('[saveFeeResult] 新規挿入: row=%s, 指導者="%s", 年月="%s"', lastRow, instructorName, ymLabel);
   writeFeeRow(sheet, lastRow, calcId, instructorName, ymLabel, result);
 }
 
@@ -245,9 +262,11 @@ function writeFeeRow(sheet, rowIndex, calcId, instructorName, ymLabel, result) {
     result.netPay,
     result.travelTotal,
     new Date(),
-    false, // 修正フラグ
+    false,
   ]];
   sheet.getRange(rowIndex, 1, 1, values[0].length).setValues(values);
+  // C列（対象年月）をテキスト形式に強制してSheetsの日付自動変換を防ぐ
+  sheet.getRange(rowIndex, 3).setNumberFormat('@STRING@');
 }
 
 function getOrCreateFeeSheet() {
@@ -264,6 +283,8 @@ function getOrCreateFeeSheet() {
     ];
     sheet.appendRow(headers);
     sheet.setFrozenRows(1);
+    // C列（対象年月）をテキスト形式に設定
+    sheet.getRange(1, 3, 1000, 1).setNumberFormat('@STRING@');
   }
   return sheet;
 }
@@ -310,18 +331,25 @@ function calcAllFees(body) {
   }
 
   // 計算前に対象年月の既存謝金計算結果を一括削除して重複を防ぐ
+  // ここで全件削除した後、calcFee は skipDelete=true で呼び出して二重削除を防ぐ
   const feeSheet = getOrCreateFeeSheet();
   const feeData = feeSheet.getDataRange().getValues();
+  Logger.log('[calcAllFees] 一括削除開始: year=%s, month=%s, 現在の総行数(ヘッダー含む)=%s', year, month, feeData.length);
+  let bulkDeleted = 0;
   for (let i = feeData.length - 1; i >= 1; i--) {
     if (matchYearMonth(feeData[i][2], year, month)) {
+      Logger.log('[calcAllFees] 削除: row=%s, 氏名="%s", 年月セル値="%s"', i + 1, feeData[i][1], feeData[i][2]);
       feeSheet.deleteRow(i + 1);
+      bulkDeleted++;
     }
   }
+  Logger.log('[calcAllFees] 一括削除完了: 削除件数=%s, 残行数(ヘッダー含む)=%s', bulkDeleted, feeSheet.getLastRow());
 
   const results = [];
   names.forEach(name => {
     try {
-      const res = calcFee({ instructorName: name, year, month });
+      // skipDelete=true: 上の一括削除で既存行は全て消えているため、saveFeeResult 内の削除をスキップ
+      const res = calcFee({ instructorName: name, year, month }, true);
       if (res.success) {
         const instructor = findInstructor(name) || {};
         results.push({
@@ -459,19 +487,44 @@ function generateTransferSheet(body) {
 
 /**
  * 謝金計算結果シートのC列値（対象年月）と指定の年月を比較する。
- * - "2026年4月" 形式の文字列はそのまま比較
- * - DateオブジェクトまたはISO文字列はgetFullYear()/getMonth()+1で比較
+ * 以下の全形式に対応:
+ *   - "2026年4月" 形式の文字列（テキスト保存時の正規形式）
+ *   - Dateオブジェクト（GASがセル値を日付型に変換した場合）
+ *   - "2026-04-01T..." ISO文字列
+ *   - 数値（Sheetsの日付シリアル値。GASでは通常Dateになるが念のため対応）
  */
 function matchYearMonth(cellValue, year, month) {
-  if (!cellValue) return false;
-  // 文字列形式 "YYYY年M月"
-  if (typeof cellValue === 'string') {
-    return cellValue === year + '年' + month + '月';
-  }
-  // Dateオブジェクト（GASがセル値をDate型に変換した場合）
+  if (cellValue === null || cellValue === undefined || cellValue === '') return false;
+
+  // Dateオブジェクト
   if (cellValue instanceof Date) {
+    if (isNaN(cellValue.getTime())) return false;
     return cellValue.getFullYear() === year && (cellValue.getMonth() + 1) === month;
   }
+
+  // 数値（Sheetsの日付シリアル値）→ Dateに変換して比較
+  // Sheetsシリアル値: 1900-01-01 = 1, 以降1日=1
+  if (typeof cellValue === 'number') {
+    const msPerDay = 86400000;
+    const epoch = new Date(Date.UTC(1899, 11, 30)).getTime();
+    const d = new Date(epoch + cellValue * msPerDay);
+    return d.getUTCFullYear() === year && (d.getUTCMonth() + 1) === month;
+  }
+
+  const str = String(cellValue).trim();
+
+  // "YYYY年M月" または "YYYY年MM月" 形式
+  const jpMatch = str.match(/^(\d{4})年(\d{1,2})月$/);
+  if (jpMatch) {
+    return parseInt(jpMatch[1]) === year && parseInt(jpMatch[2]) === month;
+  }
+
+  // ISO文字列 "YYYY-MM-..." 形式
+  const isoMatch = str.match(/^(\d{4})-(\d{2})/);
+  if (isoMatch) {
+    return parseInt(isoMatch[1]) === year && parseInt(isoMatch[2]) === month;
+  }
+
   return false;
 }
 
