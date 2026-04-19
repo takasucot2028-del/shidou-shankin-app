@@ -603,16 +603,23 @@ async function confirmDeleteInstructor() {
 async function gasGet(params) {
   const url = new URL(Config.GAS_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString(), { method: 'GET' });
+  const res = await fetch(url.toString(), {
+    method:   'GET',
+    redirect: 'follow',
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
 
 async function gasPost(body) {
+  // Content-Type を text/plain にすることでプリフライトを回避
   const res = await fetch(Config.GAS_URL, {
-    method:  'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body:    JSON.stringify(body),
+    method:   'POST',
+    redirect: 'follow',
+    headers:  { 'Content-Type': 'text/plain;charset=UTF-8' },
+    body:     JSON.stringify(body),
   });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
 

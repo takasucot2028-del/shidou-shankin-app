@@ -5,7 +5,7 @@
 const Config = {
   // Google Apps Script Web App URL
   // デプロイ後に取得したURLを設定する
-  GAS_URL: 'https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbzkgcqHJLn5fMX7mTxsrG1Z58yAt-5sD3CwtuSszhPHFZNGr6Au2nwFwG_MapbO4vgurA/exec/exec',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbzkgcqHJLn5fMX7mTxsrG1Z58yAt-5sD3CwtuSszhPHFZNGr6Au2nwFwG_MapbO4vgurA/exec',
 
   // 時給設定（円）
   HOURLY_RATE: {
