@@ -267,7 +267,7 @@ function addRow() {
     }
   });
 
-  tbody.appendChild(tr);
+  tbody.insertBefore(tr, tbody.firstChild);
 }
 
 function recalcRow(tr) {
