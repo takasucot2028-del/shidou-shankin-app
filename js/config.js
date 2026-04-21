@@ -25,7 +25,7 @@ const Config = {
   },
 
   // 教員の勤務終了時刻（分換算）
-  TEACHER_WORK_END_MINUTES: 16 * 60 + 45, // 16:45
+  TEACHER_WORK_END_MINUTES: 16 * 60 + 40, // 16:40
 
   // 月報提出締切日
   SUBMISSION_DEADLINE_DAY: 5,

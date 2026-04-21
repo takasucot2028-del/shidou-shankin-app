@@ -20,8 +20,8 @@ const MAX_HOURS = {
   '大会引率': 4,
 };
 
-// 教員の勤務終了時刻（分換算）16:45
-const TEACHER_WORK_END_MINUTES = 16 * 60 + 45;
+// 教員の勤務終了時刻（分換算）16:40
+const TEACHER_WORK_END_MINUTES = 16 * 60 + 40;
 
 // ========== 謝金計算メイン ==========
 
@@ -169,7 +169,7 @@ function calcInstructionHours(startTime, endTime, category, instructorType) {
 
   let effectiveMinutes;
 
-  // 教員かつ平日・長期休暇は16:45以降のみ有効
+  // 教員かつ平日・長期休暇は16:40以降のみ有効
   const isTeacher = instructorType === '教員';
   const isWeekdayOrLongVacation = category === '平日' || category === '長期休暇';
 
@@ -599,6 +599,59 @@ function runCleanupFeeResults() {
 }
 
 // ========== デバッグ用テスト関数 ==========
+
+/**
+ * 教員・平日・16:40開始・18:10終了のケースで謝金計算時間を検証する
+ * Apps Scriptエディタから手動実行し、ログで結果を確認すること
+ */
+function testCalcFee1640() {
+  Logger.log('=== testCalcFee1640 開始 ===');
+
+  const startTime = '16:40';
+  const endTime   = '18:10';
+  const category  = '平日';
+  const instructorType = '教員';
+
+  // 入力値の分換算を確認
+  const startMin = timeToMinutes(startTime);
+  const endMin   = timeToMinutes(endTime);
+  Logger.log('開始時刻: %s → %s 分', startTime, startMin);
+  Logger.log('終了時刻: %s → %s 分', endTime,   endMin);
+  Logger.log('TEACHER_WORK_END_MINUTES: %s 分 (%s)', TEACHER_WORK_END_MINUTES,
+             Math.floor(TEACHER_WORK_END_MINUTES / 60) + ':' + ('0' + (TEACHER_WORK_END_MINUTES % 60)).slice(-2));
+
+  // 有効開始時刻
+  const effectiveStart   = Math.max(startMin, TEACHER_WORK_END_MINUTES);
+  const overlapMinutes   = effectiveStart - startMin;   // 勤務重複時間（分）
+  const effectiveMinutes = Math.max(endMin - effectiveStart, 0);
+  const maxMinutes       = (MAX_HOURS[category] || 0) * 60;
+  const cappedMinutes    = Math.min(effectiveMinutes, maxMinutes);
+  const flooredMinutes   = Math.floor(cappedMinutes / 15) * 15;
+
+  Logger.log('--- 計算過程 ---');
+  Logger.log('有効開始時刻 (effectiveStart): %s 分', effectiveStart);
+  Logger.log('勤務重複時間 (overlapMinutes): %s 分 ← 期待値: 0分', overlapMinutes);
+  Logger.log('有効指導時間 (effectiveMinutes): %s 分 ← 期待値: 90分 (1h30m)', effectiveMinutes);
+  Logger.log('上限 (maxMinutes): %s 分 (%s h)', maxMinutes, MAX_HOURS[category]);
+  Logger.log('上限適用後 (cappedMinutes): %s 分', cappedMinutes);
+  Logger.log('15分切捨後 (flooredMinutes): %s 分 ← 期待値: 90分 (1h30m)', flooredMinutes);
+
+  // calcInstructionHours 経由でも確認
+  const calcHours = calcInstructionHours(startTime, endTime, category, instructorType);
+  Logger.log('--- calcInstructionHours の戻り値 ---');
+  Logger.log('calcHours: %s 時間 ← 期待値: 1.5時間', calcHours);
+
+  // 判定
+  const PASS = '✓ PASS';
+  const FAIL = '✗ FAIL';
+  Logger.log('--- 判定 ---');
+  Logger.log('勤務重複時間: %s', overlapMinutes === 0   ? PASS : FAIL + ' (実際: ' + overlapMinutes + '分)');
+  Logger.log('実質指導時間: %s', effectiveMinutes === 90 ? PASS : FAIL + ' (実際: ' + effectiveMinutes + '分)');
+  Logger.log('15分切捨後:   %s', flooredMinutes === 90  ? PASS : FAIL + ' (実際: ' + flooredMinutes + '分)');
+  Logger.log('calcHours:    %s', calcHours === 1.5       ? PASS : FAIL + ' (実際: ' + calcHours + '時間)');
+
+  Logger.log('=== testCalcFee1640 完了 ===');
+}
 
 /**
  * Apps Scriptエディタから手動実行して口座振替シート生成をテストする
