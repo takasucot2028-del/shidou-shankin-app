@@ -189,6 +189,13 @@
   font-size: 13px;
   line-height: 1.7;
 }
+.slip-org-name {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--color-text-sub);
+}
 .slip-preview h2 {
   font-size: 20px;
   font-weight: 700;

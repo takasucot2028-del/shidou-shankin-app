@@ -536,6 +536,7 @@ function renderSlip(inst, fee, year, month) {
   const accountNum  = inst['口座番号'] || '';
 
   document.getElementById('slip-content').innerHTML = `
+    <div class="slip-org-name">一般社団法人たかすスポーツクラブ</div>
     <h2>指導謝金支払明細書</h2>
     <dl class="slip-meta">
       <dt>発行日</dt>      <dd>${fmtDateJP(today)}</dd>
@@ -563,14 +564,6 @@ function renderSlip(inst, fee, year, month) {
       <div class="slip-amount-row net"><span>差引支払額</span><span>¥${Number(fee['差引支払額'] || 0).toLocaleString()}</span></div>
     </div>
 
-    <div class="slip-sign">
-      <div class="slip-sign-box">
-        <div class="slip-sign-label">担当者確認</div>
-      </div>
-      <div class="slip-sign-box">
-        <div class="slip-sign-label">受領確認（指導者署名）</div>
-      </div>
-    </div>
   `;
 }
 

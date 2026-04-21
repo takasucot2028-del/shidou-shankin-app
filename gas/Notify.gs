@@ -352,5 +352,5 @@ function getAdminUrl() {
 
 function getOrgSignature() {
   return PropertiesService.getScriptProperties().getProperty('ORG_SIGNATURE')
-    || '〇〇町教育委員会 スポーツ・健康づくり担当';
+    || '一般社団法人たかすスポーツクラブ';
 }
