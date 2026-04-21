@@ -36,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.pin-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
       const inp = document.getElementById(btn.dataset.target);
-      inp.type = inp.type === 'password' ? 'text' : 'password';
+      inp.type = inp.type === 'text' ? 'password' : 'text';
     });
   });
 

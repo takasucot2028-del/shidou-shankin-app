@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.pin-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
       const inp = document.getElementById(btn.dataset.target);
-      inp.type = inp.type === 'password' ? 'text' : 'password';
+      inp.type = inp.type === 'text' ? 'password' : 'text';
     });
   });
   document.getElementById('confirm-delete-cancel').addEventListener('click', () => {
@@ -694,8 +694,8 @@ function clearMasterForm() {
   document.getElementById('m-type').value         = '一般';
   document.getElementById('m-hourly').value       = '1600';
   document.getElementById('m-account-type').value = '普通';
-  // PIN入力欄をpassword表示に戻す
-  document.getElementById('m-pin').type = 'password';
+  // PIN入力欄をマスク表示（password）に戻す
+  document.getElementById('m-pin').type = 'text';
 }
 
 function fillMasterForm(inst) {

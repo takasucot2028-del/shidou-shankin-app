@@ -37,7 +37,7 @@
         <div class="form-group">
           <label for="login-pin">PIN（4桁） <span class="required">*</span></label>
           <div class="pin-input-wrapper">
-            <input type="password" id="login-pin" maxlength="4" inputmode="numeric" placeholder="••••" autocomplete="off">
+            <input type="text" id="login-pin" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" placeholder="••••" autocomplete="off">
             <button type="button" class="btn-icon pin-toggle" data-target="login-pin" title="PIN表示切替" aria-label="PIN表示切替">👁</button>
           </div>
         </div>

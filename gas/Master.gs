@@ -94,8 +94,12 @@ function addInstructor(sheet, body) {
     body.accountNumber || '',
     body.email       || '',
     new Date(),
-    body.pin         || '',
+    body.pin ? String(body.pin) : '',
   ]);
+  // PINセルをテキスト形式に設定（先頭0が消えないよう）
+  const newRowIndex = sheet.getLastRow();
+  const pinCol = 13; // M列
+  sheet.getRange(newRowIndex, pinCol).setNumberFormat('@');
   return { success: true };
 }
 
@@ -128,6 +132,9 @@ function editInstructor(sheet, body) {
         allData[i][11],       // 登録日は変えない
         newPin,               // PIN（M列 = インデックス12）
       ];
+      if (pinIdx !== -1) {
+        sheet.getRange(i + 1, pinIdx + 1).setNumberFormat('@');
+      }
       sheet.getRange(i + 1, 1, 1, newRow.length).setValues([newRow]);
       return { success: true };
     }
