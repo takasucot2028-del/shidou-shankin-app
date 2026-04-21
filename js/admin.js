@@ -560,8 +560,8 @@ function renderSlip(inst, fee, year, month) {
     <div class="slip-amount-box">
       <div class="slip-amount-row"><span>謝金総額</span><span>¥${Number(fee['謝金総額'] || 0).toLocaleString()}</span></div>
       <div class="slip-amount-row"><span>源泉徴収額（10.21%）</span><span>−¥${Number(fee['源泉徴収額'] || 0).toLocaleString()}</span></div>
-      <div class="slip-amount-row"><span>旅費</span><span>¥${Number(fee['旅費総額'] || 0).toLocaleString()}</span></div>
       <div class="slip-amount-row net"><span>差引支払額</span><span>¥${Number(fee['差引支払額'] || 0).toLocaleString()}</span></div>
+      <div class="slip-amount-row travel-section"><span>旅費</span><span>¥${Number(fee['旅費総額'] || 0).toLocaleString()}</span></div>
     </div>
 
   `;
