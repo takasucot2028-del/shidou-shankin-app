@@ -58,6 +58,9 @@ function doPost(e) {
 
   try {
     switch (action) {
+      case 'checkPin':
+        result = checkPin(body);
+        break;
       case 'saveReport':
         result = saveReport(body);
         break;

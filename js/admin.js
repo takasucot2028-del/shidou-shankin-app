@@ -39,6 +39,14 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('master-modal-close').addEventListener('click', closeMasterModal);
   document.getElementById('master-modal-cancel').addEventListener('click', closeMasterModal);
   document.getElementById('master-modal-save').addEventListener('click', saveMaster);
+
+  // PINの表示切替（モーダル内）
+  document.querySelectorAll('.pin-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const inp = document.getElementById(btn.dataset.target);
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+    });
+  });
   document.getElementById('confirm-delete-cancel').addEventListener('click', () => {
     document.getElementById('confirm-delete-modal').classList.add('hidden');
   });
@@ -679,13 +687,15 @@ function closeMasterModal() {
 }
 
 function clearMasterForm() {
-  ['m-name','m-club','m-email','m-bank','m-branch','m-account-number'].forEach(id => {
+  ['m-name','m-club','m-email','m-bank','m-branch','m-account-number','m-pin'].forEach(id => {
     document.getElementById(id).value = '';
   });
-  document.getElementById('m-rate-type').value   = 'メイン';
-  document.getElementById('m-type').value        = '一般';
-  document.getElementById('m-hourly').value      = '1600';
-  document.getElementById('m-account-type').value= '普通';
+  document.getElementById('m-rate-type').value    = 'メイン';
+  document.getElementById('m-type').value         = '一般';
+  document.getElementById('m-hourly').value       = '1600';
+  document.getElementById('m-account-type').value = '普通';
+  // PIN入力欄をpassword表示に戻す
+  document.getElementById('m-pin').type = 'password';
 }
 
 function fillMasterForm(inst) {
@@ -700,11 +710,22 @@ function fillMasterForm(inst) {
   document.getElementById('m-account-type').value   = inst['口座種別'] || inst.accountType || '普通';
   document.getElementById('m-account-number').value = inst['口座番号'] || inst.accountNumber || '';
   document.getElementById('m-name').disabled        = true; // 編集時は氏名変更不可
+  document.getElementById('m-pin').value            = '';   // セキュリティのため既存PINは表示しない
 }
 
 async function saveMaster() {
   const name = AdminState.editingName || document.getElementById('m-name').value.trim();
   if (!name) { showToast('氏名を入力してください', 'error'); return; }
+
+  const pin = document.getElementById('m-pin').value.trim();
+  if (pin && !/^\d{4}$/.test(pin)) {
+    showToast('PINは4桁の数字で入力してください', 'error');
+    return;
+  }
+  if (!AdminState.editingName && !pin) {
+    showToast('新規追加時はPINを設定してください', 'error');
+    return;
+  }
 
   const body = {
     action:         'updateMaster',
@@ -719,6 +740,7 @@ async function saveMaster() {
     branch:         document.getElementById('m-branch').value.trim(),
     accountType:    document.getElementById('m-account-type').value,
     accountNumber:  document.getElementById('m-account-number').value.trim(),
+    pin:            pin || undefined,
   };
 
   if (!body.clubName)  { showToast('クラブ名を入力してください', 'error'); return; }

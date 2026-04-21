@@ -328,6 +328,14 @@
           <label for="m-account-number">口座番号</label>
           <input type="text" id="m-account-number" maxlength="20" inputmode="numeric">
         </div>
+        <div class="form-group form-group-full">
+          <label for="m-pin">PIN（4桁数字）</label>
+          <div class="pin-input-wrapper">
+            <input type="password" id="m-pin" maxlength="4" inputmode="numeric" placeholder="例: 1234" autocomplete="off">
+            <button type="button" class="btn-icon pin-toggle" data-target="m-pin" title="PIN表示切替" aria-label="PIN表示切替">👁</button>
+          </div>
+          <span class="form-hint">編集時に空白のままにすると変更しません。指導者に通知してください。</span>
+        </div>
       </div>
     </div>
     <div class="modal-footer">

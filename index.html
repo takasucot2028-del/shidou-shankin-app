@@ -12,11 +12,42 @@
 <header class="header">
   <div class="header-inner">
     <h1 class="header-title">指導月報入力</h1>
-    <span class="header-badge">部活動地域展開 指導謝金管理</span>
+    <div class="header-right">
+      <span class="header-badge">部活動地域展開 指導謝金管理</span>
+      <button type="button" id="logout-btn" class="btn btn-outline-white btn-sm hidden">ログアウト</button>
+    </div>
   </div>
 </header>
 
 <main class="main">
+
+  <!-- ========== ログイン画面 ========== -->
+  <div id="login-section" class="container">
+    <section class="card login-card">
+      <div class="login-icon">🔑</div>
+      <h2 class="section-title">ログイン</h2>
+      <p class="login-desc">氏名を選択し、事務局から通知されたPINを入力してください。</p>
+      <div class="login-form">
+        <div class="form-group">
+          <label for="login-instructor">指導者氏名 <span class="required">*</span></label>
+          <select id="login-instructor" required>
+            <option value="">選択してください</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="login-pin">PIN（4桁） <span class="required">*</span></label>
+          <div class="pin-input-wrapper">
+            <input type="password" id="login-pin" maxlength="4" inputmode="numeric" placeholder="••••" autocomplete="off">
+            <button type="button" class="btn-icon pin-toggle" data-target="login-pin" title="PIN表示切替" aria-label="PIN表示切替">👁</button>
+          </div>
+        </div>
+      </div>
+      <div id="login-error" class="login-error hidden"></div>
+      <div class="action-buttons" style="justify-content:center; margin-top:24px;">
+        <button type="button" id="login-btn" class="btn btn-primary" style="min-width:160px;">ログイン</button>
+      </div>
+    </section>
+  </div>
 
   <!-- ========== 入力フォーム ========== -->
   <div id="form-section" class="container">

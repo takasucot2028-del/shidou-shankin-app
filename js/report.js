@@ -11,12 +11,34 @@ const State = {
   isSubmitted: false,    // 提出済みデータ表示中フラグ
 };
 
+// ========== 認証（sessionStorage） ==========
+
+const AUTH_KEY = 'report_auth_v1';
+
+function getAuth() {
+  try { return JSON.parse(sessionStorage.getItem(AUTH_KEY)); } catch { return null; }
+}
+function setAuth(name) { sessionStorage.setItem(AUTH_KEY, JSON.stringify({ name })); }
+function clearAuth() { sessionStorage.removeItem(AUTH_KEY); }
+
 // ========== 初期化 ==========
 
 document.addEventListener('DOMContentLoaded', () => {
   initYearMonth();
-  loadInstructors();
-  addRow();              // 最初の1行を表示
+  loadInstructors();     // ログイン画面のドロップダウンを先に埋める
+
+  // ログインイベント
+  document.getElementById('login-btn').addEventListener('click', onLogin);
+  document.getElementById('login-pin').addEventListener('keydown', e => { if (e.key === 'Enter') onLogin(); });
+  document.getElementById('logout-btn').addEventListener('click', onLogout);
+
+  // PINの表示切替
+  document.querySelectorAll('.pin-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const inp = document.getElementById(btn.dataset.target);
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+    });
+  });
 
   document.getElementById('instructor-name').addEventListener('change', onInstructorChange);
   document.getElementById('target-year').addEventListener('change', onYearMonthChange);
@@ -28,7 +50,137 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('confirm-submit-btn').addEventListener('click', onConfirmSubmit);
   document.getElementById('new-report-btn').addEventListener('click', resetForm);
   document.getElementById('resubmit-btn').addEventListener('click', onResubmit);
+
+  // 既存セッションがあればそのままフォームへ
+  const auth = getAuth();
+  if (auth && auth.name) {
+    showFormAfterLogin(auth.name);
+  } else {
+    showLoginSection();
+  }
 });
+
+// ========== ログイン/ログアウト ==========
+
+function showLoginSection() {
+  document.getElementById('login-section').classList.remove('hidden');
+  document.getElementById('form-section').classList.add('hidden');
+  document.getElementById('confirm-section').classList.add('hidden');
+  document.getElementById('complete-section').classList.add('hidden');
+  document.getElementById('logout-btn').classList.add('hidden');
+}
+
+async function onLogin() {
+  const name = document.getElementById('login-instructor').value;
+  const pin  = document.getElementById('login-pin').value;
+  const errEl = document.getElementById('login-error');
+
+  errEl.classList.add('hidden');
+  errEl.textContent = '';
+
+  if (!name) { showLoginError('指導者氏名を選択してください'); return; }
+  if (!pin)  { showLoginError('PINを入力してください'); return; }
+  if (!/^\d{4}$/.test(pin)) { showLoginError('PINは4桁の数字で入力してください'); return; }
+
+  document.getElementById('login-btn').disabled = true;
+  showLoading();
+  try {
+    const res = await gasPost({ action: 'checkPin', name, pin });
+    if (!res.success) {
+      showLoginError(res.error || 'PINが正しくありません');
+      return;
+    }
+    setAuth(name);
+    showFormAfterLogin(name);
+  } catch (e) {
+    showLoginError('通信エラーが発生しました: ' + e.message);
+  } finally {
+    document.getElementById('login-btn').disabled = false;
+    hideLoading();
+  }
+}
+
+function showLoginError(msg) {
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = msg;
+  errEl.classList.remove('hidden');
+}
+
+function showFormAfterLogin(name) {
+  // ログイン済みの指導者を選択状態にして変更不可にする
+  const sel = document.getElementById('instructor-name');
+  // まだ指導者一覧がロードされていない場合は onInstructorSelectsReady で処理
+  State._pendingLoginName = name;
+
+  document.getElementById('login-section').classList.add('hidden');
+  document.getElementById('form-section').classList.remove('hidden');
+  document.getElementById('logout-btn').classList.remove('hidden');
+  document.getElementById('login-pin').value = '';
+
+  // 指導者一覧がすでにあれば即反映
+  if (State.instructors.length > 0) {
+    applyLoginToForm(name);
+  }
+}
+
+function applyLoginToForm(name) {
+  const sel = document.getElementById('instructor-name');
+  // ログイン者のみの選択肢に絞り込む
+  sel.innerHTML = '';
+  const inst = State.instructors.find(i => (i['氏名'] || i.name) === name);
+  if (inst) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name + '（' + (inst['クラブ名'] || inst.clubName || '') + '）';
+    sel.appendChild(opt);
+  } else {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  }
+  sel.value = name;
+  sel.disabled = true;
+
+  // クラブ名・指導者情報を自動セット
+  State.currentInstructor = inst || null;
+  document.getElementById('club-name').value = inst ? (inst['クラブ名'] || inst.clubName || '') : '';
+
+  if (document.getElementById('report-tbody').rows.length === 0) {
+    addRow();
+  }
+  if (inst) {
+    const defaultRate = inst['区分'] || inst.rateType || 'メイン';
+    document.querySelectorAll('.sel-rate').forEach(s => { s.value = defaultRate; });
+    updateTotals();
+    loadDraftReport();
+  }
+}
+
+function onLogout() {
+  if (!confirm('ログアウトしますか？')) return;
+  clearAuth();
+  State.currentInstructor = null;
+  State.submitId = null;
+  State.rows = [];
+  State.isSubmitted = false;
+  State._pendingLoginName = null;
+  rowIndex = 0;
+
+  // フォームリセット
+  document.getElementById('instructor-name').disabled = false;
+  document.getElementById('instructor-name').value = '';
+  document.getElementById('club-name').value = '';
+  document.getElementById('report-tbody').innerHTML = '';
+  updateSubmitButtonsUI();
+
+  // ログイン画面のドロップダウンをリセット
+  document.getElementById('login-instructor').value = '';
+  document.getElementById('login-pin').value = '';
+  document.getElementById('login-error').classList.add('hidden');
+
+  showLoginSection();
+}
 
 function initYearMonth() {
   const now = new Date();
@@ -56,14 +208,18 @@ async function loadInstructors() {
     const data = await gasGet({ action: 'getInstructors' });
     if (!data.success) throw new Error(data.error);
     State.instructors = data.data || [];
-    populateInstructorSelect();
+    populateLoginSelect();
+    // ログイン済みの場合はフォームにも反映
+    if (State._pendingLoginName) {
+      applyLoginToForm(State._pendingLoginName);
+    }
   } catch (e) {
     showToast('指導者一覧の取得に失敗しました: ' + e.message, 'error');
   }
 }
 
-function populateInstructorSelect() {
-  const sel = document.getElementById('instructor-name');
+function populateLoginSelect() {
+  const sel = document.getElementById('login-instructor');
   sel.innerHTML = '<option value="">選択してください</option>';
   State.instructors.forEach(inst => {
     const opt = document.createElement('option');
@@ -71,6 +227,10 @@ function populateInstructorSelect() {
     opt.textContent = (inst['氏名'] || inst.name || '') + '（' + (inst['クラブ名'] || inst.clubName || '') + '）';
     sel.appendChild(opt);
   });
+}
+
+function populateInstructorSelect() {
+  // ログイン後はapplyLoginToFormが担うため、ここでは何もしない
 }
 
 async function onInstructorChange() {
@@ -525,15 +685,24 @@ function showCompleteSection() {
 }
 
 function resetForm() {
-  document.getElementById('instructor-name').value = '';
-  document.getElementById('club-name').value = '';
+  // ログイン状態は維持したまま月報入力だけリセット
   document.getElementById('report-tbody').innerHTML = '';
-  State.currentInstructor = null;
   State.submitId = null;
   State.rows = [];
   State.isSubmitted = false;
   rowIndex = 0;
-  addRow();
+
+  const auth = getAuth();
+  if (auth && auth.name) {
+    // 同一ユーザーで継続
+    applyLoginToForm(auth.name);
+  } else {
+    document.getElementById('instructor-name').value = '';
+    document.getElementById('club-name').value = '';
+    State.currentInstructor = null;
+    addRow();
+  }
+
   updateTotals();
   updateSubmitButtonsUI();
   document.getElementById('complete-section').classList.add('hidden');
