@@ -648,6 +648,7 @@ function generateClubSummarySheet(body) {
       fee:         parseFloat(row[9])  || 0,
       withholding: parseFloat(row[10]) || 0,
       netPay:      parseFloat(row[11]) || 0,
+      travelTotal: parseFloat(row[12]) || 0,
     };
   });
 
@@ -663,32 +664,34 @@ function generateClubSummarySheet(body) {
   // クラブ別に小計行を挟みながら出力行を組み立てる
   const outputRows = [];
   let currentClub = null;
-  let clubFee = 0, clubWithholding = 0, clubNetPay = 0;
-  let totalFee = 0, totalWithholding = 0, totalNetPay = 0;
+  let clubFee = 0, clubWithholding = 0, clubNetPay = 0, clubTravel = 0;
+  let totalFee = 0, totalWithholding = 0, totalNetPay = 0, totalTravel = 0;
 
   dataRows.forEach(row => {
     if (currentClub !== null && row.clubName !== currentClub) {
       // 前のクラブの小計行
-      outputRows.push(['【小計】' + currentClub, '', '', clubFee, clubWithholding, clubNetPay, true]);
-      clubFee = 0; clubWithholding = 0; clubNetPay = 0;
+      outputRows.push(['【小計】' + currentClub, '', '', clubFee, clubWithholding, clubNetPay, clubTravel, true]);
+      clubFee = 0; clubWithholding = 0; clubNetPay = 0; clubTravel = 0;
     }
     currentClub = row.clubName;
-    outputRows.push([row.clubName, row.name, row.rateType, row.fee, row.withholding, row.netPay, false]);
+    outputRows.push([row.clubName, row.name, row.rateType, row.fee, row.withholding, row.netPay, row.travelTotal, false]);
     clubFee        += row.fee;
     clubWithholding += row.withholding;
     clubNetPay      += row.netPay;
+    clubTravel      += row.travelTotal;
     totalFee        += row.fee;
     totalWithholding += row.withholding;
     totalNetPay      += row.netPay;
+    totalTravel      += row.travelTotal;
   });
 
   // 最後のクラブの小計行
   if (currentClub !== null) {
-    outputRows.push(['【小計】' + currentClub, '', '', clubFee, clubWithholding, clubNetPay, true]);
+    outputRows.push(['【小計】' + currentClub, '', '', clubFee, clubWithholding, clubNetPay, clubTravel, true]);
   }
 
   // 全体合計行
-  outputRows.push(['【合計】', '', '', totalFee, totalWithholding, totalNetPay, 'total']);
+  outputRows.push(['【合計】', '', '', totalFee, totalWithholding, totalNetPay, totalTravel, 'total']);
 
   // シートを取得または作成して上書き
   const ss = getSpreadsheet();
@@ -702,11 +705,11 @@ function generateClubSummarySheet(body) {
 
   // 1行目: タイトル
   sheet.getRange(1, 1).setValue(ymLabel + ' クラブ別指導謝金支払集計');
-  sheet.getRange(1, 1, 1, 6).mergeAcross();
+  sheet.getRange(1, 1, 1, 7).mergeAcross();
   sheet.getRange(1, 1).setFontSize(14).setFontWeight('bold');
 
   // 3行目: ヘッダー
-  const headers = ['クラブ名', '指導者氏名', '区分（メイン/サブ）', '謝金総額（円）', '源泉徴収額（円）', '差引支給額（円）'];
+  const headers = ['クラブ名', '指導者氏名', '区分（メイン/サブ）', '謝金総額（円）', '源泉徴収額（円）', '差引支給額（円）', '旅費総額（円）'];
   sheet.getRange(3, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(3, 1, 1, headers.length)
     .setBackground('#4a4a4a')
@@ -717,30 +720,30 @@ function generateClubSummarySheet(body) {
   // 4行目以降: データ行・小計行・合計行
   outputRows.forEach((row, i) => {
     const r = 4 + i;
-    const isSubtotal = row[6] === true;
-    const isTotal    = row[6] === 'total';
-    const cellValues = [row[0], row[1], row[2], row[3], row[4], row[5]];
-    sheet.getRange(r, 1, 1, 6).setValues([cellValues]);
+    const isSubtotal = row[7] === true;
+    const isTotal    = row[7] === 'total';
+    const cellValues = [row[0], row[1], row[2], row[3], row[4], row[5], row[6]];
+    sheet.getRange(r, 1, 1, 7).setValues([cellValues]);
 
-    // 数値列は通貨書式
-    sheet.getRange(r, 4, 1, 3).setNumberFormat('#,##0');
+    // 数値列は通貨書式（謝金総額〜旅費総額）
+    sheet.getRange(r, 4, 1, 4).setNumberFormat('#,##0');
 
     if (isTotal) {
-      sheet.getRange(r, 1, 1, 6)
+      sheet.getRange(r, 1, 1, 7)
         .setBackground('#2c5282')
         .setFontColor('#ffffff')
         .setFontWeight('bold');
     } else if (isSubtotal) {
-      sheet.getRange(r, 1, 1, 6)
+      sheet.getRange(r, 1, 1, 7)
         .setBackground('#dbeafe')
         .setFontWeight('bold');
     } else if (i % 2 === 0) {
-      sheet.getRange(r, 1, 1, 6).setBackground('#f8f9fa');
+      sheet.getRange(r, 1, 1, 7).setBackground('#f8f9fa');
     }
   });
 
   // 列幅を自動調整
-  sheet.autoResizeColumns(1, 6);
+  sheet.autoResizeColumns(1, 7);
 
   const dataCount = dataRows.length;
   Logger.log('[generateClubSummarySheet] 完了: シート名="%s", データ件数=%s', sheetName, dataCount);

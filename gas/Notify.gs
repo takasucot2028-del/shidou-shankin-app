@@ -134,6 +134,103 @@ function notifyAdminUnsubmitted() {
   });
 }
 
+// ========== 給与明細一括メール送信 ==========
+
+/**
+ * 指定年月の全指導者に給与明細メールを一括送信する
+ * body: { year, month }
+ * メールアドレス未登録の指導者はスキップする
+ */
+function sendPaySlipEmails(body) {
+  const year  = parseInt(body.year);
+  const month = parseInt(body.month);
+  const ymLabel = year + '年' + month + '月';
+
+  // 謝金計算結果シートから対象年月の行を取得
+  const feeSheet = getOrCreateFeeSheet();
+  let feeData = feeSheet.getDataRange().getValues().slice(1);
+  let feeRows = feeData.filter(row => matchYearMonth(row[2], year, month));
+
+  if (feeRows.length === 0) {
+    const calcResult = calcAllFees({ year: year, month: month });
+    if (!calcResult.success || calcResult.data.length === 0) {
+      return { success: false, error: '対象年月の提出済み月報がありません: ' + ymLabel };
+    }
+    feeData = feeSheet.getDataRange().getValues().slice(1);
+    feeRows = feeData.filter(row => matchYearMonth(row[2], year, month));
+  }
+
+  if (feeRows.length === 0) {
+    return { success: false, error: '対象年月の謝金計算結果がありません: ' + ymLabel };
+  }
+
+  // 指導者マスタをマップ化（氏名 → マスタ行）
+  const masterSheet = getSheet('指導者マスタ');
+  const masterData = masterSheet.getDataRange().getValues().slice(1);
+  const masterMap = {};
+  masterData.forEach(row => {
+    if (row[1]) masterMap[String(row[1]).trim()] = row;
+  });
+
+  // 支払予定日を計算
+  const payDate = calcPaymentDate(year, month);
+  const payDateStr = Utilities.formatDate(payDate, Session.getScriptTimeZone(), 'yyyy年M月d日');
+
+  let sentCount = 0;
+  let skippedCount = 0;
+
+  feeRows.forEach(row => {
+    const name = String(row[1]).trim();
+    const master = masterMap[name];
+    if (!master) { skippedCount++; return; }
+
+    const email = String(master[10] || '').trim();
+    if (!email) { skippedCount++; return; }
+
+    const clubName   = String(master[2] || '').trim();
+    const bankInfo   = [master[6], master[7], master[8], master[9]]
+                         .map(v => String(v || '').trim()).filter(Boolean).join(' ');
+    const fee         = parseFloat(row[9])  || 0;
+    const withholding = parseFloat(row[10]) || 0;
+    const netPay      = parseFloat(row[11]) || 0;
+    const travelTotal = parseFloat(row[12]) || 0;
+
+    const subject = '【指導謝金】' + year + '年' + month + '月分 給与明細書';
+
+    const mailBody = [
+      name + ' 様',
+      '',
+      '下記のとおり、' + ymLabel + '分の指導謝金をお知らせします。',
+      '',
+      '─────────────────────',
+      '　指導者氏名　: ' + name,
+      '　クラブ名　　: ' + clubName,
+      '　対象年月　　: ' + ymLabel,
+      '─────────────────────',
+      '　謝金総額　　　　: ¥' + fee.toLocaleString(),
+      '　源泉徴収額（10.21%）: ¥' + withholding.toLocaleString(),
+      '　旅費　　　　　　: ¥' + travelTotal.toLocaleString(),
+      '　差引支給額　　　: ¥' + netPay.toLocaleString(),
+      '─────────────────────',
+      '　支払予定日　: ' + payDateStr,
+      '　振込口座　　: ' + (bankInfo || '（未登録）'),
+      '─────────────────────',
+      '',
+      '不明な点がございましたら事務局までお問い合わせください。',
+      '',
+      getOrgSignature(),
+    ].join('\n');
+
+    sendMail(email, subject, mailBody);
+    logNotification(email, '給与明細', ymLabel, '送信済');
+    sentCount++;
+  });
+
+  Logger.log('[sendPaySlipEmails] 完了: year=%s, month=%s, sent=%s, skipped=%s', year, month, sentCount, skippedCount);
+
+  return { success: true, sentCount: sentCount, skippedCount: skippedCount };
+}
+
 // ========== メール送信 ==========
 
 function sendMail(to, subject, body) {

@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fee-club-summary-btn').addEventListener('click', generateClubSummarySheet);
   document.getElementById('slip-preview-btn').addEventListener('click', previewSlip);
   document.getElementById('slip-print-btn').addEventListener('click', () => window.print());
+  document.getElementById('slip-email-btn').addEventListener('click', bulkSendPaySlipEmails);
   document.getElementById('save-fee-edit-btn').addEventListener('click', saveFeeEdit);
 
   document.getElementById('master-add-btn').addEventListener('click', () => openMasterModal());
@@ -422,6 +423,29 @@ async function previewSlip() {
     document.getElementById('slip-print-btn').classList.remove('hidden');
   } catch (e) {
     showToast('給与明細の生成に失敗しました: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function bulkSendPaySlipEmails() {
+  const year  = document.getElementById('slip-year').value;
+  const month = document.getElementById('slip-month').value;
+  const ymLabel = year + '年' + month + '月';
+
+  if (!confirm('対象年月（' + ymLabel + '）の給与明細を全指導者にメール送信します。よろしいですか？')) return;
+
+  showLoading();
+  try {
+    const res = await gasPost({ action: 'sendPaySlipEmails', year: parseInt(year), month: parseInt(month) });
+    if (!res.success) {
+      showToast('メール送信に失敗しました: ' + (res.error || '不明なエラー'), 'error');
+      return;
+    }
+    showToast(ymLabel + '分の給与明細メールを ' + res.sentCount + ' 件送信しました'
+      + (res.skippedCount > 0 ? '（メールアドレス未登録 ' + res.skippedCount + ' 件スキップ）' : ''), 'success');
+  } catch (e) {
+    showToast('メール送信に失敗しました: ' + e.message, 'error');
   } finally {
     hideLoading();
   }
