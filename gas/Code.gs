@@ -79,6 +79,9 @@ function doPost(e) {
       case 'generateTransferSheet':
         result = generateTransferSheet(body);
         break;
+      case 'generateClubSummarySheet':
+        result = generateClubSummarySheet(body);
+        break;
       case 'updateReport':
         result = updateReport(body);
         break;

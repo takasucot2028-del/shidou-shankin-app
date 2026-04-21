@@ -598,6 +598,156 @@ function runCleanupFeeResults() {
   Logger.log('=== runCleanupFeeResults 完了 ===');
 }
 
+// ========== クラブ別月次支払集計シート生成 ==========
+
+/**
+ * 指定年月のクラブ別月次支払集計シートを生成する
+ * body: { year, month }
+ */
+function generateClubSummarySheet(body) {
+  const year = parseInt(body.year);
+  const month = parseInt(body.month);
+  const ymLabel = year + '年' + month + '月';
+  const sheetName = 'クラブ別集計_' + ymLabel;
+
+  // 謝金計算結果から対象年月の行を取得（なければ自動計算して再取得）
+  const feeSheet = getOrCreateFeeSheet();
+  let feeData = feeSheet.getDataRange().getValues().slice(1);
+  let feeRows = feeData.filter(row => matchYearMonth(row[2], year, month));
+
+  if (feeRows.length === 0) {
+    const calcResult = calcAllFees({ year: year, month: month });
+    if (!calcResult.success || calcResult.data.length === 0) {
+      return { success: false, error: '対象年月の提出済み月報がありません: ' + ymLabel };
+    }
+    feeData = feeSheet.getDataRange().getValues().slice(1);
+    feeRows = feeData.filter(row => matchYearMonth(row[2], year, month));
+  }
+
+  if (feeRows.length === 0) {
+    return { success: false, error: '対象年月の謝金計算結果がありません: ' + ymLabel };
+  }
+
+  // 指導者マスタをマップ化（氏名 → マスタ行）
+  const masterSheet = getSheet('指導者マスタ');
+  const masterData = masterSheet.getDataRange().getValues().slice(1);
+  const masterMap = {};
+  masterData.forEach(row => {
+    if (row[1]) masterMap[String(row[1]).trim()] = row;
+  });
+
+  // 謝金計算結果と指導者マスタを結合してデータ行を構築
+  // feeRows: [calcId, 指導者氏名, 対象年月, 平日h, 休日h, 長期h, 大会h, mainH, subH, fee, withholding, netPay, travel, calcDate, fixFlag]
+  const dataRows = feeRows.map(row => {
+    const name = String(row[1]).trim();
+    const master = masterMap[name];
+    return {
+      clubName:    master ? String(master[2]).trim() : '',
+      name:        name,
+      rateType:    master ? String(master[3]).trim() : '',
+      fee:         parseFloat(row[9])  || 0,
+      withholding: parseFloat(row[10]) || 0,
+      netPay:      parseFloat(row[11]) || 0,
+    };
+  });
+
+  // クラブ名でソート（クラブ名昇順、同一クラブ内は氏名昇順）
+  dataRows.sort((a, b) => {
+    if (a.clubName < b.clubName) return -1;
+    if (a.clubName > b.clubName) return 1;
+    if (a.name < b.name) return -1;
+    if (a.name > b.name) return 1;
+    return 0;
+  });
+
+  // クラブ別に小計行を挟みながら出力行を組み立てる
+  const outputRows = [];
+  let currentClub = null;
+  let clubFee = 0, clubWithholding = 0, clubNetPay = 0;
+  let totalFee = 0, totalWithholding = 0, totalNetPay = 0;
+
+  dataRows.forEach(row => {
+    if (currentClub !== null && row.clubName !== currentClub) {
+      // 前のクラブの小計行
+      outputRows.push(['【小計】' + currentClub, '', '', clubFee, clubWithholding, clubNetPay, true]);
+      clubFee = 0; clubWithholding = 0; clubNetPay = 0;
+    }
+    currentClub = row.clubName;
+    outputRows.push([row.clubName, row.name, row.rateType, row.fee, row.withholding, row.netPay, false]);
+    clubFee        += row.fee;
+    clubWithholding += row.withholding;
+    clubNetPay      += row.netPay;
+    totalFee        += row.fee;
+    totalWithholding += row.withholding;
+    totalNetPay      += row.netPay;
+  });
+
+  // 最後のクラブの小計行
+  if (currentClub !== null) {
+    outputRows.push(['【小計】' + currentClub, '', '', clubFee, clubWithholding, clubNetPay, true]);
+  }
+
+  // 全体合計行
+  outputRows.push(['【合計】', '', '', totalFee, totalWithholding, totalNetPay, 'total']);
+
+  // シートを取得または作成して上書き
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  } else {
+    sheet.clearContents();
+    sheet.clearFormats();
+  }
+
+  // 1行目: タイトル
+  sheet.getRange(1, 1).setValue(ymLabel + ' クラブ別指導謝金支払集計');
+  sheet.getRange(1, 1, 1, 6).mergeAcross();
+  sheet.getRange(1, 1).setFontSize(14).setFontWeight('bold');
+
+  // 3行目: ヘッダー
+  const headers = ['クラブ名', '指導者氏名', '区分（メイン/サブ）', '謝金総額（円）', '源泉徴収額（円）', '差引支給額（円）'];
+  sheet.getRange(3, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(3, 1, 1, headers.length)
+    .setBackground('#4a4a4a')
+    .setFontColor('#ffffff')
+    .setFontWeight('bold');
+  sheet.setFrozenRows(3);
+
+  // 4行目以降: データ行・小計行・合計行
+  outputRows.forEach((row, i) => {
+    const r = 4 + i;
+    const isSubtotal = row[6] === true;
+    const isTotal    = row[6] === 'total';
+    const cellValues = [row[0], row[1], row[2], row[3], row[4], row[5]];
+    sheet.getRange(r, 1, 1, 6).setValues([cellValues]);
+
+    // 数値列は通貨書式
+    sheet.getRange(r, 4, 1, 3).setNumberFormat('#,##0');
+
+    if (isTotal) {
+      sheet.getRange(r, 1, 1, 6)
+        .setBackground('#2c5282')
+        .setFontColor('#ffffff')
+        .setFontWeight('bold');
+    } else if (isSubtotal) {
+      sheet.getRange(r, 1, 1, 6)
+        .setBackground('#dbeafe')
+        .setFontWeight('bold');
+    } else if (i % 2 === 0) {
+      sheet.getRange(r, 1, 1, 6).setBackground('#f8f9fa');
+    }
+  });
+
+  // 列幅を自動調整
+  sheet.autoResizeColumns(1, 6);
+
+  const dataCount = dataRows.length;
+  Logger.log('[generateClubSummarySheet] 完了: シート名="%s", データ件数=%s', sheetName, dataCount);
+
+  return { success: true, count: dataCount, sheetName: sheetName };
+}
+
 // ========== デバッグ用テスト関数 ==========
 
 /**

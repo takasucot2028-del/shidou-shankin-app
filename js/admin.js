@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fee-load-btn').addEventListener('click', loadFeeResults);
   document.getElementById('fee-export-btn').addEventListener('click', exportFeeSheet);
   document.getElementById('fee-transfer-btn').addEventListener('click', generateTransferSheet);
+  document.getElementById('fee-club-summary-btn').addEventListener('click', generateClubSummarySheet);
   document.getElementById('slip-preview-btn').addEventListener('click', previewSlip);
   document.getElementById('slip-print-btn').addEventListener('click', () => window.print());
   document.getElementById('save-fee-edit-btn').addEventListener('click', saveFeeEdit);
@@ -353,6 +354,24 @@ async function generateTransferSheet() {
     console.log('[generateTransferSheet] GASレスポンス:', res);
     if (res.success) {
       showToast(`口座振替データを出力しました（${res.count}件）`, 'success');
+    } else {
+      showToast(res.error || '出力に失敗しました', 'error');
+    }
+  } catch (e) {
+    showToast('通信エラー: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function generateClubSummarySheet() {
+  const year  = document.getElementById('fee-year').value;
+  const month = document.getElementById('fee-month').value;
+  showLoading();
+  try {
+    const res = await gasPost({ action: 'generateClubSummarySheet', year, month });
+    if (res.success) {
+      showToast(`クラブ別集計シートを出力しました（${res.count}件）`, 'success');
     } else {
       showToast(res.error || '出力に失敗しました', 'error');
     }
