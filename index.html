@@ -49,6 +49,14 @@
     </section>
   </div>
 
+  <!-- ========== タブナビゲーション ========== -->
+  <div id="tab-nav" class="tab-nav hidden">
+    <div class="tab-nav-inner">
+      <button type="button" class="tab-btn active" data-tab="report">月報入力</button>
+      <button type="button" class="tab-btn" data-tab="payslip">給与明細</button>
+    </div>
+  </div>
+
   <!-- ========== 入力フォーム ========== -->
   <div id="form-section" class="container">
 
@@ -179,6 +187,35 @@
         <button type="button" id="new-report-btn" class="btn btn-primary">新しい月報を入力する</button>
       </div>
     </section>
+  </div>
+
+  <!-- ========== 給与明細セクション ========== -->
+  <div id="payslip-section" class="container hidden">
+    <section class="card">
+      <h2 class="section-title">給与明細</h2>
+      <div class="payslip-selector">
+        <div class="date-select-group">
+          <select id="payslip-year" aria-label="対象年"></select>
+          <span>年</span>
+          <select id="payslip-month" aria-label="対象月"></select>
+          <span>月分</span>
+        </div>
+        <button type="button" id="payslip-show-btn" class="btn btn-primary btn-sm">表示</button>
+      </div>
+    </section>
+
+    <section id="payslip-not-calculated" class="card hidden">
+      <p class="payslip-not-ready">給与明細はまだ確定されていません。事務局にお問い合わせください。</p>
+    </section>
+
+    <div id="payslip-preview" class="hidden">
+      <div class="payslip-doc" id="payslip-doc">
+        <!-- JS で生成 -->
+      </div>
+      <div class="action-buttons" style="margin-top:16px; justify-content:center;">
+        <button type="button" id="payslip-pdf-btn" class="btn btn-primary">PDFダウンロード</button>
+      </div>
+    </div>
   </div>
 
 </main>

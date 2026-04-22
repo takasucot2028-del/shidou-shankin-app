@@ -835,3 +835,83 @@ function testGenerateTransfer() {
   const result = generateTransferSheet({ year: year, month: month });
   Logger.log('=== generateTransferSheet 結果: %s ===', JSON.stringify(result));
 }
+
+// ========== 給与明細取得（指導者本人専用） ==========
+
+/**
+ * 指定指導者・年月の給与明細データを返す
+ * GET ?action=getPaySlip&instructorName=xxx&year=2026&month=4
+ */
+function getPaySlip(params) {
+  const instructorName = params.instructorName;
+  const year  = parseInt(params.year);
+  const month = parseInt(params.month);
+
+  if (!instructorName || !year || !month) {
+    return { success: false, error: 'パラメータが不足しています' };
+  }
+
+  const instructor = findInstructor(instructorName);
+  if (!instructor) {
+    return { success: false, error: '指導者マスタに登録がありません: ' + instructorName };
+  }
+
+  const feeSheet = getOrCreateFeeSheet();
+  const data = feeSheet.getDataRange().getValues();
+
+  let feeRow = null;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][1]).trim() === String(instructorName).trim() &&
+        matchYearMonth(data[i][2], year, month)) {
+      feeRow = data[i];
+      break;
+    }
+  }
+
+  if (!feeRow) {
+    return {
+      success: true,
+      notCalculated: true,
+      instructor: {
+        name: instructor.name,
+        clubName: instructor.clubName,
+        rateType: instructor.rateType,
+        type: instructor.type,
+      }
+    };
+  }
+
+  const calcDate = feeRow[13];
+  const calcDateStr = (calcDate instanceof Date)
+    ? Utilities.formatDate(calcDate, 'Asia/Tokyo', 'yyyy/MM/dd')
+    : String(calcDate || '');
+
+  return {
+    success: true,
+    notCalculated: false,
+    instructor: {
+      name: instructor.name,
+      clubName: instructor.clubName,
+      rateType: instructor.rateType,
+      type: instructor.type,
+      bank: instructor.bank,
+      branch: instructor.branch,
+      accountType: instructor.accountType,
+      accountNumber: instructor.accountNumber,
+    },
+    fee: {
+      yearMonth: String(feeRow[2]),
+      weekdayHours:   Number(feeRow[3])  || 0,
+      holidayHours:   Number(feeRow[4])  || 0,
+      longVacHours:   Number(feeRow[5])  || 0,
+      tournamentHours: Number(feeRow[6]) || 0,
+      mainCalcHours:  Number(feeRow[7])  || 0,
+      subCalcHours:   Number(feeRow[8])  || 0,
+      totalFee:       Number(feeRow[9])  || 0,
+      withholding:    Number(feeRow[10]) || 0,
+      netPay:         Number(feeRow[11]) || 0,
+      travelTotal:    Number(feeRow[12]) || 0,
+      calcDate: calcDateStr,
+    }
+  };
+}

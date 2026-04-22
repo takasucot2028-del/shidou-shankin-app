@@ -35,6 +35,9 @@ function doGet(e) {
       case 'exportSheet':
         result = exportSheet(e.parameter);
         break;
+      case 'getPaySlip':
+        result = getPaySlip(e.parameter);
+        break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }

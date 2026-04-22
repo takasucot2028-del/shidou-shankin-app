@@ -313,3 +313,206 @@
 @media (max-width: 480px) {
   .total-item.highlight .total-value { font-size: 20px; }
 }
+
+/* ===========================
+   タブナビゲーション
+   =========================== */
+.tab-nav {
+  background: #fff;
+  border-bottom: 2px solid var(--color-border);
+  margin-bottom: 20px;
+}
+.tab-nav-inner {
+  display: flex;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 22px;
+  border: none;
+  background: none;
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  font-weight: 600;
+  color: var(--color-text-sub);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: color var(--transition), border-color var(--transition);
+  white-space: nowrap;
+}
+.tab-btn:hover { color: var(--color-primary); }
+.tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+/* ===========================
+   給与明細セクション
+   =========================== */
+.payslip-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.payslip-not-ready {
+  background: #fff8e1;
+  border-left: 4px solid var(--color-warning);
+  padding: 16px 20px;
+  border-radius: var(--radius-sm);
+  color: #6b5000;
+  font-size: var(--font-size-base);
+  text-align: center;
+  margin: 0;
+}
+
+/* 給与明細ドキュメント */
+.payslip-doc {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 32px 36px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+.payslip-header-area {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid var(--color-primary);
+  gap: 16px;
+}
+.payslip-issuer-name {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+.payslip-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-sub);
+}
+.payslip-main-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-primary);
+  text-align: right;
+  white-space: nowrap;
+}
+.payslip-period {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: right;
+}
+.payslip-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.payslip-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+.payslip-info-table th {
+  background: var(--color-bg);
+  font-weight: 600;
+  padding: 6px 10px;
+  text-align: left;
+  border: 1px solid var(--color-border);
+  white-space: nowrap;
+  width: 90px;
+  color: var(--color-text-sub);
+}
+.payslip-info-table td {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+}
+.payslip-section-heading {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--color-primary);
+  border-left: 3px solid var(--color-primary);
+  padding-left: 8px;
+  margin-bottom: 8px;
+  margin-top: 16px;
+}
+.payslip-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+  margin-bottom: 4px;
+}
+.payslip-table th {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 700;
+  padding: 7px 10px;
+  text-align: left;
+  border: 1px solid var(--color-border);
+}
+.payslip-table td {
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+.payslip-table tbody tr:nth-child(even) td { background: #fafcff; }
+.payslip-subtotal td {
+  font-weight: 700;
+  background: var(--color-bg) !important;
+  border-top: 2px solid var(--color-border);
+}
+.payslip-summary-table td { font-size: var(--font-size-base); }
+.payslip-netpay td {
+  font-size: var(--font-size-lg) !important;
+  font-weight: 700 !important;
+  color: var(--color-danger) !important;
+  background: #fff0f0 !important;
+  border-top: 2px solid var(--color-danger) !important;
+}
+
+/* ===========================
+   PDF印刷 (@media print)
+   =========================== */
+@media print {
+  body > * { display: none !important; }
+  body > main .payslip-doc { display: block !important; }
+
+  .payslip-doc {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 15mm 18mm;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  /* 印刷時に強制表示 */
+  .payslip-doc,
+  .payslip-doc * {
+    visibility: visible !important;
+    display: revert !important;
+  }
+}
+
+/* モバイル */
+@media (max-width: 768px) {
+  .payslip-doc { padding: 20px 16px; }
+  .payslip-header-area { flex-direction: column; }
+  .payslip-main-title { text-align: left; font-size: var(--font-size-lg); }
+  .payslip-period { text-align: left; }
+  .payslip-info-grid { grid-template-columns: 1fr; }
+}

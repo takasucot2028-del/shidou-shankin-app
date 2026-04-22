@@ -25,6 +25,7 @@ function clearAuth() { sessionStorage.removeItem(AUTH_KEY); }
 
 document.addEventListener('DOMContentLoaded', () => {
   initYearMonth();
+  initPayslipSelectors();
   loadInstructors();     // ログイン画面のドロップダウンを先に埋める
 
   // ログインイベント
@@ -51,6 +52,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('new-report-btn').addEventListener('click', resetForm);
   document.getElementById('resubmit-btn').addEventListener('click', onResubmit);
 
+  // タブ切替
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  // 給与明細ボタン
+  document.getElementById('payslip-show-btn').addEventListener('click', onShowPaySlip);
+  document.getElementById('payslip-pdf-btn').addEventListener('click', printPaySlip);
+
   // 既存セッションがあればそのままフォームへ
   const auth = getAuth();
   if (auth && auth.name) {
@@ -64,7 +74,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function showLoginSection() {
   document.getElementById('login-section').classList.remove('hidden');
+  document.getElementById('tab-nav').classList.add('hidden');
   document.getElementById('form-section').classList.add('hidden');
+  document.getElementById('payslip-section').classList.add('hidden');
   document.getElementById('confirm-section').classList.add('hidden');
   document.getElementById('complete-section').classList.add('hidden');
   document.getElementById('logout-btn').classList.add('hidden');
@@ -107,15 +119,21 @@ function showLoginError(msg) {
 }
 
 function showFormAfterLogin(name) {
-  // ログイン済みの指導者を選択状態にして変更不可にする
-  const sel = document.getElementById('instructor-name');
-  // まだ指導者一覧がロードされていない場合は onInstructorSelectsReady で処理
   State._pendingLoginName = name;
 
   document.getElementById('login-section').classList.add('hidden');
+  document.getElementById('tab-nav').classList.remove('hidden');
   document.getElementById('form-section').classList.remove('hidden');
+  document.getElementById('payslip-section').classList.add('hidden');
+  document.getElementById('confirm-section').classList.add('hidden');
+  document.getElementById('complete-section').classList.add('hidden');
   document.getElementById('logout-btn').classList.remove('hidden');
   document.getElementById('login-pin').value = '';
+
+  // 月報タブをアクティブにする
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === 'report');
+  });
 
   // 指導者一覧がすでにあれば即反映
   if (State.instructors.length > 0) {
@@ -297,9 +315,8 @@ async function loadDraftReport() {
 }
 
 function addRowWithData(r) {
-  addRow();
-  const tbody = document.getElementById('report-tbody');
-  const tr = tbody.rows[tbody.rows.length - 1];
+  const tr = addRow();
+  if (!tr) return;
 
   tr.querySelector('.inp-date').value        = parseDateStr(r.date);
   tr.querySelector('.sel-category').value    = r.category || '平日';
@@ -352,7 +369,7 @@ function addRow() {
   const tbody = document.getElementById('report-tbody');
   if (tbody.rows.length >= 31) {
     showToast('1ヶ月の最大行数（31行）に達しました', 'warning');
-    return;
+    return null;
   }
 
   const id = 'row-' + (rowIndex++);
@@ -428,6 +445,7 @@ function addRow() {
   });
 
   tbody.insertBefore(tr, tbody.firstChild);
+  return tr;
 }
 
 function recalcRow(tr) {
@@ -643,6 +661,7 @@ function onShowConfirm() {
     <div class="fee-row"><span>旅費合計</span><span>¥${preview.travel.toLocaleString()}</span></div>
   `;
 
+  document.getElementById('tab-nav').classList.add('hidden');
   document.getElementById('form-section').classList.add('hidden');
   document.getElementById('confirm-section').classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -650,7 +669,12 @@ function onShowConfirm() {
 
 function showFormSection() {
   document.getElementById('confirm-section').classList.add('hidden');
+  document.getElementById('complete-section').classList.add('hidden');
+  document.getElementById('tab-nav').classList.remove('hidden');
   document.getElementById('form-section').classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === 'report');
+  });
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -680,6 +704,7 @@ function showCompleteSection() {
     `${name} さんの ${year}年${month}月分 指導月報が提出されました。`;
 
   document.getElementById('confirm-section').classList.add('hidden');
+  document.getElementById('tab-nav').classList.add('hidden');
   document.getElementById('complete-section').classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -706,7 +731,11 @@ function resetForm() {
   updateTotals();
   updateSubmitButtonsUI();
   document.getElementById('complete-section').classList.add('hidden');
+  document.getElementById('tab-nav').classList.remove('hidden');
   document.getElementById('form-section').classList.remove('hidden');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === 'report');
+  });
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -783,3 +812,234 @@ function showToast(msg, type = 'info') {
 
 function showLoading() { document.getElementById('loading').classList.remove('hidden'); }
 function hideLoading() { document.getElementById('loading').classList.add('hidden'); }
+
+// ========== タブ切替 ==========
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+
+  if (tab === 'report') {
+    document.getElementById('form-section').classList.remove('hidden');
+    document.getElementById('payslip-section').classList.add('hidden');
+  } else if (tab === 'payslip') {
+    document.getElementById('form-section').classList.add('hidden');
+    document.getElementById('payslip-section').classList.remove('hidden');
+    // プレビューを初期化（年月選択のみ表示）
+    document.getElementById('payslip-preview').classList.add('hidden');
+    document.getElementById('payslip-not-calculated').classList.add('hidden');
+  }
+}
+
+// ========== 給与明細 ==========
+
+function initPayslipSelectors() {
+  const now = new Date();
+  const yearSel  = document.getElementById('payslip-year');
+  const monthSel = document.getElementById('payslip-month');
+
+  for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    // 先月を初期選択
+    const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+    const prevYear  = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+    if (y === prevYear) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m;
+    const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+    if (m === prevMonth) opt.selected = true;
+    monthSel.appendChild(opt);
+  }
+}
+
+async function onShowPaySlip() {
+  const auth = getAuth();
+  if (!auth || !auth.name) { showToast('ログインが必要です', 'error'); return; }
+
+  const year  = parseInt(document.getElementById('payslip-year').value);
+  const month = parseInt(document.getElementById('payslip-month').value);
+
+  showLoading();
+  document.getElementById('payslip-preview').classList.add('hidden');
+  document.getElementById('payslip-not-calculated').classList.add('hidden');
+
+  try {
+    const data = await gasGet({
+      action: 'getPaySlip',
+      instructorName: auth.name,
+      year,
+      month,
+    });
+    if (!data.success) throw new Error(data.error);
+
+    if (data.notCalculated) {
+      document.getElementById('payslip-not-calculated').classList.remove('hidden');
+    } else {
+      renderPaySlip(data, year, month);
+    }
+  } catch (e) {
+    showToast('給与明細の取得に失敗しました: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderPaySlip(data, year, month) {
+  const { instructor, fee } = data;
+  const today    = new Date();
+  const payDate  = calcPaymentDate(year, month);
+
+  const todayStr  = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+  const payDateStr = `${payDate.getFullYear()}年${payDate.getMonth() + 1}月${payDate.getDate()}日`;
+
+  // 指導内容明細行（メイン・サブ）
+  const mainFee = Math.round((fee.mainCalcHours || 0) * Config.HOURLY_RATE.MAIN);
+  const subFee  = Math.round((fee.subCalcHours  || 0) * Config.HOURLY_RATE.SUB);
+  let rateRows = '';
+  if (fee.mainCalcHours > 0) {
+    rateRows += `<tr>
+      <td>メイン指導</td>
+      <td class="text-right">${fmtH(fee.mainCalcHours)}</td>
+      <td class="text-right">¥${Config.HOURLY_RATE.MAIN.toLocaleString()}</td>
+      <td class="text-right">¥${mainFee.toLocaleString()}</td>
+    </tr>`;
+  }
+  if (fee.subCalcHours > 0) {
+    rateRows += `<tr>
+      <td>サブ指導</td>
+      <td class="text-right">${fmtH(fee.subCalcHours)}</td>
+      <td class="text-right">¥${Config.HOURLY_RATE.SUB.toLocaleString()}</td>
+      <td class="text-right">¥${subFee.toLocaleString()}</td>
+    </tr>`;
+  }
+  if (!rateRows) {
+    rateRows = '<tr><td colspan="4" class="text-center text-muted">データなし</td></tr>';
+  }
+
+  // 区分別指導時間行
+  const cats = [
+    { label: '平日',     hours: fee.weekdayHours    || 0 },
+    { label: '休日',     hours: fee.holidayHours    || 0 },
+    { label: '長期休暇', hours: fee.longVacHours    || 0 },
+    { label: '大会引率', hours: fee.tournamentHours || 0 },
+  ].filter(c => c.hours > 0);
+
+  const catTotal = (fee.weekdayHours || 0) + (fee.holidayHours || 0) +
+                   (fee.longVacHours || 0) + (fee.tournamentHours || 0);
+  const catRows = cats.map(c =>
+    `<tr><td>${esc(c.label)}</td><td class="text-right">${fmtH(c.hours)}</td></tr>`
+  ).join('');
+
+  // 振込先口座
+  const bankParts = [instructor.bank, instructor.branch, instructor.accountType, instructor.accountNumber]
+    .filter(Boolean);
+  const bankInfo = bankParts.length ? esc(bankParts.join('　')) : '未登録';
+
+  const travelRow = (fee.travelTotal || 0) > 0
+    ? `<tr><td>旅費</td><td class="text-right">¥${(fee.travelTotal).toLocaleString()}</td></tr>`
+    : '';
+
+  const catSection = cats.length > 0 ? `
+    <h3 class="payslip-section-heading">区分別指導時間</h3>
+    <table class="payslip-table">
+      <thead><tr><th>指導区分</th><th class="text-right">謝金計算時間</th></tr></thead>
+      <tbody>
+        ${catRows}
+        <tr class="payslip-subtotal">
+          <td>合計</td>
+          <td class="text-right">${fmtH(catTotal)}</td>
+        </tr>
+      </tbody>
+    </table>` : '';
+
+  document.getElementById('payslip-doc').innerHTML = `
+    <div class="payslip-header-area">
+      <div class="payslip-issuer-block">
+        <div class="payslip-issuer-name">一般社団法人たかすスポーツクラブ</div>
+        <div class="payslip-meta">
+          <span>発行日：${todayStr}</span>
+          <span>支払予定日：${payDateStr}</span>
+        </div>
+      </div>
+      <div class="payslip-title-block">
+        <div class="payslip-main-title">指導謝金支払明細書</div>
+        <div class="payslip-period">${year}年${month}月分</div>
+      </div>
+    </div>
+
+    <div class="payslip-info-grid">
+      <table class="payslip-info-table">
+        <tr><th>指導者氏名</th><td>${esc(instructor.name || '')}</td></tr>
+        <tr><th>クラブ名</th><td>${esc(instructor.clubName || '')}</td></tr>
+        <tr><th>区分</th><td>${esc(instructor.rateType || '')}</td></tr>
+      </table>
+      <table class="payslip-info-table">
+        <tr><th>振込先口座</th><td>${bankInfo}</td></tr>
+      </table>
+    </div>
+
+    <h3 class="payslip-section-heading">指導内容明細</h3>
+    <table class="payslip-table">
+      <thead>
+        <tr>
+          <th>区分</th>
+          <th class="text-right">謝金計算時間</th>
+          <th class="text-right">時給単価</th>
+          <th class="text-right">謝金額</th>
+        </tr>
+      </thead>
+      <tbody>${rateRows}</tbody>
+    </table>
+
+    ${catSection}
+
+    <h3 class="payslip-section-heading" style="margin-top:20px;">支払金額</h3>
+    <table class="payslip-table payslip-summary-table">
+      <tbody>
+        <tr><td>謝金総額</td><td class="text-right fw-bold">¥${(fee.totalFee || 0).toLocaleString()}</td></tr>
+        <tr><td>源泉徴収額（10.21%）</td><td class="text-right text-danger">−¥${(fee.withholding || 0).toLocaleString()}</td></tr>
+        <tr class="payslip-netpay">
+          <td>差引支払額</td>
+          <td class="text-right">¥${(fee.netPay || 0).toLocaleString()}</td>
+        </tr>
+        ${travelRow}
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('payslip-preview').classList.remove('hidden');
+  document.getElementById('payslip-not-calculated').classList.add('hidden');
+}
+
+// 支払予定日：翌月10日、土日の場合は前の金曜日
+function calcPaymentDate(year, month) {
+  let payYear = year, payMonth = month + 1;
+  if (payMonth > 12) { payMonth = 1; payYear++; }
+
+  const d   = new Date(payYear, payMonth - 1, 10);
+  const dow = d.getDay();
+  let day   = 10;
+  if      (dow === 6) day = 9;  // 土曜 → 前日(金)
+  else if (dow === 0) day = 8;  // 日曜 → 2日前(金)
+
+  return new Date(payYear, payMonth - 1, day);
+}
+
+// 時間表示（例: 1.5 → "1時間30分"）
+function fmtH(h) {
+  if (!h || h === 0) return '0時間';
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return hh + '時間' + (mm > 0 ? mm + '分' : '');
+}
+
+function printPaySlip() {
+  window.print();
+}
