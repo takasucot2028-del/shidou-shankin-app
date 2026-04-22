@@ -444,7 +444,15 @@ function addRow() {
     }
   });
 
+  const prevStart = tbody.rows[0] ? tbody.rows[0].querySelector('.inp-start').value : '';
+  const prevEnd   = tbody.rows[0] ? tbody.rows[0].querySelector('.inp-end').value   : '';
+
   tbody.insertBefore(tr, tbody.firstChild);
+
+  if (prevStart) tr.querySelector('.inp-start').value = prevStart;
+  if (prevEnd)   tr.querySelector('.inp-end').value   = prevEnd;
+  if (prevStart || prevEnd) recalcRow(tr);
+
   return tr;
 }
 
