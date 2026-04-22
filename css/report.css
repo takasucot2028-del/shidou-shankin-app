@@ -64,16 +64,16 @@
 .report-table tbody tr:hover td { background: #f0f6ff; }
 
 /* 列幅 */
-.report-table col.col-date        { width: 108px; }
-.report-table col.col-category    { width: 92px; }
-.report-table col.col-rate        { width: 72px; }
-.report-table col.col-time        { width: 72px; }
-.report-table col.col-hours       { width: 68px; }
-.report-table col.col-transport   { width: 76px; }
+.report-table col.col-date        { width: 120px; }
+.report-table col.col-category    { width: 110px; }
+.report-table col.col-rate        { width: 90px; }
+.report-table col.col-time        { width: 100px; }
+.report-table col.col-hours       { width: 90px; }
+.report-table col.col-transport   { width: 90px; }
 .report-table col.col-destination { width: 100px; }
-.report-table col.col-travel      { width: 72px; }
-.report-table col.col-note        { width: auto; }
-.report-table col.col-action      { width: 36px; }
+.report-table col.col-travel      { width: 80px; }
+.report-table col.col-note        { width: 80px; }
+.report-table col.col-action      { width: 50px; }
 
 /* テーブル内インプット */
 .report-table input[type="date"],
@@ -85,6 +85,8 @@
   font-size: var(--font-size-xs);
   text-align: center;
 }
+.report-table input[type="date"] { min-width: 110px; }
+.report-table input[type="time"] { min-width: 88px; }
 .report-table input[type="text"] { text-align: left; }
 .report-table select {
   height: 34px;
