@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>指導月報入力 | 指導謝金管理システム</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1F4E79">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="指導月報">
+  <link rel="apple-touch-icon" href="icons/icon-192.svg">
   <link rel="stylesheet" href="css/common.css">
   <link rel="stylesheet" href="css/report.css">
 </head>
@@ -154,6 +160,7 @@
       <button type="button" id="save-btn" class="btn btn-secondary">一時保存</button>
       <button type="button" id="submit-btn" class="btn btn-primary">確認・提出する</button>
       <button type="button" id="resubmit-btn" class="btn btn-warning hidden">再提出する</button>
+      <button type="button" id="pdf-report-btn" class="btn btn-secondary">月報をPDFで出力</button>
     </div>
   </div>
 
@@ -228,5 +235,11 @@
 
 <script src="js/config.js?v=2"></script>
 <script src="js/report.js?v=2"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js')
+      .catch(err => console.warn('SW登録エラー:', err));
+  }
+</script>
 </body>
 </html>

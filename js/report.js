@@ -2,6 +2,28 @@
  * 月報入力ロジック
  */
 
+// ========== 祝日・曜日定数 ==========
+
+const WEEKDAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
+
+const JAPAN_HOLIDAYS = new Set([
+  // 2025
+  '2025-01-01','2025-01-13','2025-02-11','2025-02-23','2025-02-24',
+  '2025-03-20','2025-04-29','2025-05-03','2025-05-04','2025-05-05','2025-05-06',
+  '2025-07-21','2025-08-11','2025-09-15','2025-09-23','2025-10-13',
+  '2025-11-03','2025-11-23','2025-11-24',
+  // 2026
+  '2026-01-01','2026-01-12','2026-02-11','2026-02-23',
+  '2026-03-20','2026-04-29','2026-05-03','2026-05-04','2026-05-05','2026-05-06',
+  '2026-07-20','2026-08-11','2026-09-21','2026-09-23','2026-10-12',
+  '2026-11-03','2026-11-23',
+  // 2027
+  '2027-01-01','2027-01-11','2027-02-11','2027-02-23',
+  '2027-03-21','2027-03-22','2027-04-29','2027-05-03','2027-05-04','2027-05-05',
+  '2027-07-19','2027-08-11','2027-09-20','2027-09-23','2027-10-11',
+  '2027-11-03','2027-11-23',
+]);
+
 // ========== 状態 ==========
 const State = {
   instructors: [],       // 指導者マスタ一覧
@@ -51,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('confirm-submit-btn').addEventListener('click', onConfirmSubmit);
   document.getElementById('new-report-btn').addEventListener('click', resetForm);
   document.getElementById('resubmit-btn').addEventListener('click', onResubmit);
+  document.getElementById('pdf-report-btn').addEventListener('click', onPrintReport);
 
   // タブ切替
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -329,6 +352,7 @@ function addRowWithData(r) {
   tr.querySelector('.inp-note').value        = r.note || '';
 
   recalcRow(tr);
+  updateWeekdayLabel(tr);
 }
 
 function parseDateStr(val) {
@@ -381,7 +405,10 @@ function addRow() {
   tr.id = id;
   tr.innerHTML = `
     <td data-label="日付">
-      <input type="date" class="inp-date" aria-label="日付">
+      <div class="date-cell-wrap">
+        <input type="date" class="inp-date" aria-label="日付">
+        <span class="weekday-label"></span>
+      </div>
     </td>
     <td data-label="区分">
       <select class="sel-category" aria-label="区分">
@@ -435,6 +462,7 @@ function addRow() {
   tr.querySelector('.sel-category').addEventListener('change', () => recalcRow(tr));
   tr.querySelector('.sel-rate').addEventListener('change', updateTotals);
   tr.querySelector('.inp-travel').addEventListener('input', updateTotals);
+  tr.querySelector('.inp-date').addEventListener('change', () => updateWeekdayLabel(tr));
   tr.querySelector('.delete-row-btn').addEventListener('click', () => {
     if (document.getElementById('report-tbody').rows.length > 1) {
       tr.remove();
@@ -1050,4 +1078,183 @@ function fmtH(h) {
 
 function printPaySlip() {
   window.print();
+}
+
+// ========== 曜日表示 ==========
+
+function updateWeekdayLabel(tr) {
+  const dateVal = tr.querySelector('.inp-date').value;
+  const span    = tr.querySelector('.weekday-label');
+  if (!span) return;
+
+  if (!dateVal) {
+    span.textContent = '';
+    span.className   = 'weekday-label';
+    return;
+  }
+
+  const d = new Date(dateVal + 'T00:00:00');
+  if (isNaN(d)) {
+    span.textContent = '';
+    span.className   = 'weekday-label';
+    return;
+  }
+
+  const dow       = d.getDay();
+  const isHoliday = JAPAN_HOLIDAYS.has(dateVal);
+  span.textContent = '(' + WEEKDAY_NAMES[dow] + ')';
+
+  let cls = 'weekday-label';
+  if (isHoliday || dow === 0) cls += ' weekday-sun';
+  else if (dow === 6)         cls += ' weekday-sat';
+  span.className = cls;
+}
+
+// ========== 月報 PDF出力 ==========
+
+function onPrintReport() {
+  const name  = document.getElementById('instructor-name').value;
+  const club  = document.getElementById('club-name').value;
+  const year  = document.getElementById('target-year').value;
+  const month = document.getElementById('target-month').value;
+  const rows  = collectRows();
+
+  if (!name) { showToast('指導者氏名を選択してください', 'error'); return; }
+  if (rows.length === 0) { showToast('出力する指導記録がありません', 'error'); return; }
+
+  const sorted = rows.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  const instrType = State.currentInstructor
+    ? (State.currentInstructor['指導者種別'] || State.currentInstructor.type || '一般')
+    : '一般';
+
+  const today    = new Date();
+  const todayStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+  const preview  = calcFeePreview(sorted, instrType);
+
+  const tableRows = sorted.map(r => {
+    const d        = r.date ? new Date(r.date + 'T00:00:00') : null;
+    const dow      = d ? d.getDay() : -1;
+    const wday     = d ? '(' + WEEKDAY_NAMES[dow] + ')' : '';
+    const isHol    = r.date ? JAPAN_HOLIDAYS.has(r.date) : false;
+    const dateDisp = r.date ? r.date.slice(5).replace('-', '/') : '';
+
+    let dateColor = '';
+    if (isHol || dow === 0) dateColor = 'color:#c62828;';
+    else if (dow === 6)     dateColor = 'color:#1565c0;';
+
+    return `<tr>
+      <td style="${dateColor}white-space:nowrap;">${esc(dateDisp)} ${wday}</td>
+      <td>${esc(r.category || '')}</td>
+      <td>${esc(r.rateType || '')}</td>
+      <td>${r.startTime || ''}</td>
+      <td>${r.endTime || ''}</td>
+      <td>${r.instructionHours > 0 ? formatHours(r.instructionHours) : ''}</td>
+      <td>${esc(r.transport || '')}</td>
+      <td>${esc(r.destination || '')}</td>
+      <td>${r.travelAmount > 0 ? '¥' + Number(r.travelAmount).toLocaleString() : ''}</td>
+      <td>${esc(r.note || '')}</td>
+    </tr>`;
+  }).join('');
+
+  const catMap = {};
+  sorted.forEach(r => {
+    const cat = r.category || '平日';
+    if (!catMap[cat]) catMap[cat] = { count: 0, hours: 0 };
+    catMap[cat].count++;
+    catMap[cat].hours += r.instructionHours || 0;
+  });
+  const catRows = ['平日', '休日', '長期休暇', '大会引率']
+    .filter(c => catMap[c])
+    .map(c => `<tr><td>${c}</td><td>${catMap[c].count}回</td><td>${formatHours(catMap[c].hours)}</td></tr>`)
+    .join('');
+
+  const mainFeeAmt = Math.round(preview.mainHours * Config.HOURLY_RATE.MAIN);
+  const subFeeAmt  = Math.round(preview.subHours  * Config.HOURLY_RATE.SUB);
+
+  const html = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>${esc(year)}年${esc(month)}月分 指導月報 - ${esc(name)}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; font-size: 10pt; margin: 0; padding: 14mm 16mm; color: #222; }
+    h1 { font-size: 15pt; text-align: center; margin: 0 0 4px; color: #1F4E79; }
+    .period { text-align: center; font-size: 12pt; margin: 0 0 14px; color: #444; }
+    .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; border: 1px solid #c8d8ec; padding: 10px 14px; border-radius: 4px; background: #f5f9ff; }
+    .info-item { display: flex; flex-direction: column; gap: 1px; }
+    .info-label { font-size: 8pt; color: #666; }
+    .info-value { font-weight: bold; font-size: 10pt; }
+    .section-title { font-size: 10pt; font-weight: bold; color: #1F4E79; border-left: 3px solid #1F4E79; padding-left: 7px; margin: 0 0 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 14px; }
+    th { background: #1F4E79; color: white; padding: 5px 5px; text-align: center; border: 1px solid #1F4E79; white-space: nowrap; }
+    td { padding: 4px 5px; border: 1px solid #ccc; vertical-align: middle; text-align: center; }
+    tr:nth-child(even) td { background: #f5f8ff; }
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .fee-table td:first-child { text-align: left; }
+    .fee-net td { font-weight: bold; font-size: 12pt; color: #c62828; background: #fff0f0 !important; border-top: 2px solid #c62828; }
+    .footer { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 8px; display: flex; justify-content: space-between; font-size: 8pt; color: #666; }
+    @media print { body { padding: 10mm 13mm; } }
+  </style>
+</head>
+<body>
+  <h1>指導月報</h1>
+  <div class="period">${esc(year)}年${esc(month)}月分</div>
+
+  <div class="info-grid">
+    <div class="info-item"><span class="info-label">指導者氏名</span><span class="info-value">${esc(name)}</span></div>
+    <div class="info-item"><span class="info-label">クラブ名</span><span class="info-value">${esc(club)}</span></div>
+    <div class="info-item"><span class="info-label">指導者種別</span><span class="info-value">${esc(instrType)}</span></div>
+  </div>
+
+  <div class="section-title">指導記録</div>
+  <table>
+    <thead>
+      <tr>
+        <th>日付</th><th>区分</th><th>時給区分</th><th>開始</th><th>終了</th>
+        <th>指導時間</th><th>交通手段</th><th>行先</th><th>旅費</th><th>備考</th>
+      </tr>
+    </thead>
+    <tbody>${tableRows}</tbody>
+  </table>
+
+  <div class="summary-grid">
+    <div>
+      <div class="section-title">区分別集計</div>
+      <table>
+        <thead><tr><th>区分</th><th>回数</th><th>指導時間</th></tr></thead>
+        <tbody>${catRows}</tbody>
+      </table>
+    </div>
+    <div>
+      <div class="section-title">謝金概算</div>
+      <table class="fee-table">
+        <tbody>
+          <tr><td>メイン指導（${preview.mainHours.toFixed(2)}h × ¥${Config.HOURLY_RATE.MAIN.toLocaleString()}）</td><td>¥${mainFeeAmt.toLocaleString()}</td></tr>
+          <tr><td>サブ指導（${preview.subHours.toFixed(2)}h × ¥${Config.HOURLY_RATE.SUB.toLocaleString()}）</td><td>¥${subFeeAmt.toLocaleString()}</td></tr>
+          <tr><td>謝金総額</td><td><strong>¥${preview.fee.toLocaleString()}</strong></td></tr>
+          <tr><td>源泉徴収額（10.21%）</td><td style="color:#c62828;">−¥${preview.withholding.toLocaleString()}</td></tr>
+          <tr class="fee-net"><td>差引支払額</td><td>¥${preview.netPay.toLocaleString()}</td></tr>
+          <tr><td>旅費合計</td><td>¥${preview.travel.toLocaleString()}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>作成日：${todayStr}</span>
+    <span>一般社団法人たかすスポーツクラブ</span>
+  </div>
+  <script>window.onload = function() { window.print(); };<\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) {
+    showToast('ポップアップがブロックされました。ブラウザの設定で許可してください。', 'error');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
 }

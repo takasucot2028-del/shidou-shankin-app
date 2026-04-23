@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="108" fill="#1F4E79"/>
+  <rect x="116" y="68" width="280" height="348" rx="26" fill="white"/>
+  <rect x="154" y="138" width="204" height="18" rx="9" fill="#1F4E79"/>
+  <rect x="154" y="188" width="204" height="18" rx="9" fill="#1F4E79"/>
+  <rect x="154" y="238" width="150" height="18" rx="9" fill="#1F4E79"/>
+  <rect x="154" y="288" width="172" height="18" rx="9" fill="#1F4E79"/>
+  <text x="256" y="472" text-anchor="middle" font-family="sans-serif" font-size="48" font-weight="bold" fill="#90CAF9">指導月報</text>
+</svg>
