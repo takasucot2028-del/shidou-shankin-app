@@ -64,7 +64,7 @@
 .report-table tbody tr:hover td { background: #f0f6ff; }
 
 /* 列幅 */
-.report-table col.col-date        { width: 130px; }
+.report-table col.col-date        { width: 145px; }
 .report-table col.col-category    { width: 110px; }
 .report-table col.col-rate        { width: 90px; }
 .report-table col.col-time        { width: 100px; }
@@ -85,7 +85,7 @@
   font-size: var(--font-size-xs);
   text-align: center;
 }
-.report-table input[type="date"] { min-width: 110px; }
+.report-table input[type="date"] { min-width: 0; width: 100%; }
 .report-table input[type="time"] { min-width: 88px; }
 .report-table input[type="text"] { text-align: left; }
 .report-table select {
@@ -101,16 +101,17 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  width: 100%;
 }
 .weekday-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.03em;
   color: var(--color-text-sub);
 }
-.weekday-sat { color: #1565c0; }
-.weekday-sun { color: #c62828; }
+.weekday-sat { color: #2E75B6; }
+.weekday-sun { color: #C00000; }
 
 /* 計算時間セル */
 .hours-cell {
