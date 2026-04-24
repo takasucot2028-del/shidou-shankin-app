@@ -85,7 +85,7 @@
   font-size: var(--font-size-xs);
   text-align: center;
 }
-.report-table input[type="date"] { min-width: 0; width: 100%; }
+.report-table input[type="date"] { max-width: 120px; width: 100%; }
 .report-table input[type="time"] { min-width: 88px; }
 .report-table input[type="text"] { text-align: left; }
 .report-table select {
@@ -102,13 +102,16 @@
   align-items: center;
   gap: 2px;
   width: 100%;
+  min-width: 130px;
 }
 .weekday-label {
-  font-size: 11px;
+  display: inline-block;
+  font-size: 10px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.03em;
   color: var(--color-text-sub);
+  white-space: nowrap;
 }
 .weekday-sat { color: #2E75B6; }
 .weekday-sun { color: #C00000; }
@@ -305,7 +308,7 @@
   }
   .report-table tbody td > * { flex: 1; }
   .date-cell-wrap { flex-direction: row; align-items: center; gap: 6px; }
-  .weekday-label { font-size: 12px; }
+  .weekday-label { font-size: 10px; }
 
   .report-table td.col-action {
     position: absolute;
