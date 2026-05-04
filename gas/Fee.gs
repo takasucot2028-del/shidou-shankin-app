@@ -62,9 +62,9 @@ function calcFee(body, skipDelete) {
   }
 
   const result = computeFee(rows, instructor);
-  saveFeeResult(instructorName, year, month, result, instructor.clubName, skipDelete);
+  const calcId = saveFeeResult(instructorName, year, month, result, instructor.clubName, skipDelete);
 
-  return { success: true, result };
+  return { success: true, result, calcId };
 }
 
 /**
@@ -80,9 +80,21 @@ function updateFee(body) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(body.calcId)) {
       const overrides = body.overrides || {};
-      if (overrides.fee !== undefined) sheet.getRange(i + 1, 10).setValue(overrides.fee);
-      if (overrides.withholding !== undefined) sheet.getRange(i + 1, 11).setValue(overrides.withholding);
-      if (overrides.netPay !== undefined) sheet.getRange(i + 1, 12).setValue(overrides.netPay);
+      const currentFee         = parseFloat(data[i][9])  || 0;
+      const currentWithholding = parseFloat(data[i][10]) || 0;
+
+      // Number()変換 + isNaN + >= 0 チェックで 0 を正常値として扱う
+      const newFee = (overrides.fee !== undefined && !isNaN(Number(overrides.fee)) && Number(overrides.fee) >= 0)
+        ? Number(overrides.fee) : currentFee;
+      const newWithholding = (overrides.withholding !== undefined && !isNaN(Number(overrides.withholding)) && Number(overrides.withholding) >= 0)
+        ? Number(overrides.withholding) : currentWithholding;
+
+      // 差引支払額は常に「謝金総額 - 源泉徴収額」で統一計算
+      const newNetPay = newFee - newWithholding;
+
+      sheet.getRange(i + 1, 10).setValue(newFee);
+      sheet.getRange(i + 1, 11).setValue(newWithholding);
+      sheet.getRange(i + 1, 12).setValue(newNetPay);
       // 修正フラグを立てる
       sheet.getRange(i + 1, 15).setValue(true);
       return { success: true };
@@ -244,6 +256,7 @@ function saveFeeResult(instructorName, year, month, result, clubName, skipDelete
   const lastRow = sheet.getLastRow() + 1;
   Logger.log('[saveFeeResult] 新規挿入: row=%s, 指導者="%s", 年月="%s"', lastRow, instructorName, ymLabel);
   writeFeeRow(sheet, lastRow, calcId, instructorName, ymLabel, result);
+  return calcId;
 }
 
 function writeFeeRow(sheet, rowIndex, calcId, instructorName, ymLabel, result) {

@@ -32,6 +32,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('slip-print-btn').addEventListener('click', () => window.print());
   document.getElementById('slip-email-btn').addEventListener('click', bulkSendPaySlipEmails);
   document.getElementById('save-fee-edit-btn').addEventListener('click', saveFeeEdit);
+  document.getElementById('edit-fee').addEventListener('input', autoCalcNetPay);
+  document.getElementById('edit-withholding').addEventListener('input', autoCalcNetPay);
 
   document.getElementById('master-add-btn').addEventListener('click', () => openMasterModal());
   document.getElementById('master-search-btn').addEventListener('click', filterMasterTable);
@@ -261,13 +263,23 @@ async function loadDetailFee(name, year, month) {
   }
 }
 
+function autoCalcNetPay() {
+  const fee = parseInt(document.getElementById('edit-fee').value, 10);
+  const withholding = parseInt(document.getElementById('edit-withholding').value, 10);
+  if (!isNaN(fee) && !isNaN(withholding) && fee >= 0 && withholding >= 0) {
+    document.getElementById('edit-net').value = fee - withholding;
+  }
+}
+
 async function saveFeeEdit() {
   if (!AdminState.currentCalcId) { showToast('計算IDが取得できていません', 'error'); return; }
-  const overrides = {
-    fee:         parseInt(document.getElementById('edit-fee').value),
-    withholding: parseInt(document.getElementById('edit-withholding').value),
-    netPay:      parseInt(document.getElementById('edit-net').value),
-  };
+  const feeVal         = parseInt(document.getElementById('edit-fee').value, 10);
+  const withholdingVal = parseInt(document.getElementById('edit-withholding').value, 10);
+  if (isNaN(feeVal) || feeVal < 0) { showToast('謝金総額を正しく入力してください', 'error'); return; }
+  if (isNaN(withholdingVal) || withholdingVal < 0) { showToast('源泉徴収額は0以上の整数を入力してください', 'error'); return; }
+  const netPay = feeVal - withholdingVal;
+  document.getElementById('edit-net').value = netPay;
+  const overrides = { fee: feeVal, withholding: withholdingVal, netPay };
   showLoading();
   try {
     const res = await gasPost({ action: 'updateFee', calcId: AdminState.currentCalcId, overrides });
