@@ -72,13 +72,17 @@ function calcFee(body, skipDelete) {
  * body: { calcId, overrides: { fee, withholding, netPay } }
  */
 function updateFee(body) {
+  Logger.log('[updateFee] 受信: calcId="%s", overrides=%s', body.calcId, JSON.stringify(body.overrides));
+
   if (!body.calcId) throw new Error('calcId が必要です');
 
   const sheet = getSheet('謝金計算結果');
   const data = sheet.getDataRange().getValues();
+  Logger.log('[updateFee] 謝金計算結果シート行数(ヘッダー含む)=%s', data.length);
 
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(body.calcId)) {
+      Logger.log('[updateFee] 対象行発見: row=%s, 指導者="%s", 年月="%s"', i + 1, data[i][1], data[i][2]);
       const overrides = body.overrides || {};
       const currentFee         = parseFloat(data[i][9])  || 0;
       const currentWithholding = parseFloat(data[i][10]) || 0;
@@ -92,15 +96,22 @@ function updateFee(body) {
       // 差引支払額は常に「謝金総額 - 源泉徴収額」で統一計算
       const newNetPay = newFee - newWithholding;
 
+      Logger.log('[updateFee] 書き込み: fee=%s→%s, withholding=%s→%s, netPay=%s',
+        currentFee, newFee, currentWithholding, newWithholding, newNetPay);
+
       sheet.getRange(i + 1, 10).setValue(newFee);
       sheet.getRange(i + 1, 11).setValue(newWithholding);
       sheet.getRange(i + 1, 12).setValue(newNetPay);
       // 修正フラグを立てる
       sheet.getRange(i + 1, 15).setValue(true);
+      // 書き込みを即時確定
+      SpreadsheetApp.flush();
+      Logger.log('[updateFee] 保存完了');
       return { success: true };
     }
   }
 
+  Logger.log('[updateFee] calcId未発見: "%s"', body.calcId);
   return { success: false, error: '計算IDが見つかりません: ' + body.calcId };
 }
 

@@ -241,14 +241,24 @@ async function loadDetail() {
 }
 
 async function loadDetailFee(name, year, month) {
+  // 前回の計算IDを必ずリセット（別指導者の古いIDが残ることを防ぐ）
+  AdminState.currentCalcId = null;
   try {
+    console.log('[loadDetailFee] calcFee呼び出し:', { name, year, month });
     const res = await gasPost({ action: 'calcFee', instructorName: name, year: parseInt(year), month: parseInt(month) });
+    console.log('[loadDetailFee] calcFeeレスポンス:', res);
     if (!res.success) {
+      console.warn('[loadDetailFee] calcFee失敗:', res.error);
       document.getElementById('detail-fee-result').innerHTML = '<p class="text-muted">謝金計算結果なし</p>';
+      document.getElementById('edit-fee').value         = '';
+      document.getElementById('edit-withholding').value = '';
+      document.getElementById('edit-net').value         = '';
       return;
     }
     const r = res.result;
     AdminState.currentCalcId = res.calcId || null;
+    console.log('[loadDetailFee] calcId取得:', AdminState.currentCalcId,
+      '| fee:', r.fee, '| withholding:', r.withholding, '| netPay:', r.netPay);
     document.getElementById('detail-fee-result').innerHTML = `
       <div class="fee-row"><span>謝金総額</span><span class="fw-bold">¥${Number(r.fee).toLocaleString()}</span></div>
       <div class="fee-row deduction"><span>源泉徴収額</span><span>−¥${Number(r.withholding).toLocaleString()}</span></div>
@@ -259,6 +269,8 @@ async function loadDetailFee(name, year, month) {
     document.getElementById('edit-withholding').value = r.withholding;
     document.getElementById('edit-net').value         = r.netPay;
   } catch (e) {
+    console.error('[loadDetailFee] 例外:', e);
+    AdminState.currentCalcId = null;
     document.getElementById('detail-fee-result').innerHTML = '<p class="text-muted">計算エラー: ' + esc(e.message) + '</p>';
   }
 }
@@ -272,20 +284,37 @@ function autoCalcNetPay() {
 }
 
 async function saveFeeEdit() {
-  if (!AdminState.currentCalcId) { showToast('計算IDが取得できていません', 'error'); return; }
-  const feeVal         = parseInt(document.getElementById('edit-fee').value, 10);
-  const withholdingVal = parseInt(document.getElementById('edit-withholding').value, 10);
-  if (isNaN(feeVal) || feeVal < 0) { showToast('謝金総額を正しく入力してください', 'error'); return; }
-  if (isNaN(withholdingVal) || withholdingVal < 0) { showToast('源泉徴収額は0以上の整数を入力してください', 'error'); return; }
+  console.log('[saveFeeEdit] 開始 | currentCalcId:', AdminState.currentCalcId);
+  if (!AdminState.currentCalcId) {
+    showToast('計算IDが取得できていません。月報詳細を再度「表示」してください', 'error');
+    return;
+  }
+  const feeRaw         = document.getElementById('edit-fee').value;
+  const withholdingRaw = document.getElementById('edit-withholding').value;
+  const feeVal         = parseInt(feeRaw, 10);
+  const withholdingVal = parseInt(withholdingRaw, 10);
+  console.log('[saveFeeEdit] 入力値 | fee:', feeRaw, '→', feeVal, '| withholding:', withholdingRaw, '→', withholdingVal);
+  if (isNaN(feeVal) || feeVal < 0) {
+    showToast('謝金総額を正しく入力してください', 'error');
+    return;
+  }
+  // 源泉徴収額は0円（免税・少額）も正常値なので >= 0 を許可
+  if (isNaN(withholdingVal) || withholdingVal < 0) {
+    showToast('源泉徴収額は0以上の整数を入力してください（0円の場合は「0」を入力）', 'error');
+    return;
+  }
   const netPay = feeVal - withholdingVal;
   document.getElementById('edit-net').value = netPay;
   const overrides = { fee: feeVal, withholding: withholdingVal, netPay };
+  console.log('[saveFeeEdit] GAS送信:', { calcId: AdminState.currentCalcId, overrides });
   showLoading();
   try {
     const res = await gasPost({ action: 'updateFee', calcId: AdminState.currentCalcId, overrides });
+    console.log('[saveFeeEdit] GASレスポンス:', res);
     if (!res.success) throw new Error(res.error);
     showToast('謝金を修正しました', 'success');
   } catch (e) {
+    console.error('[saveFeeEdit] 失敗:', e);
     showToast('修正に失敗しました: ' + e.message, 'error');
   } finally {
     hideLoading();
