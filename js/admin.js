@@ -4,13 +4,14 @@
 
 // ========== 状態 ==========
 const AdminState = {
-  instructors:       [],
-  feeResults:        [],
-  currentCalcId:     null,
-  deleteTarget:      null,
-  editingName:       null,       // マスタ編集中の氏名
-  currentDetailRows: [],         // loadDetail で取得した生データ
-  editRowIndex:      0,
+  instructors:        [],
+  feeResults:         [],
+  currentCalcId:      null,
+  currentTravelTotal: 0,
+  deleteTarget:       null,
+  editingName:        null,       // マスタ編集中の氏名
+  currentDetailRows:  [],         // loadDetail で取得した生データ
+  editRowIndex:       0,
   editInstructorType: '一般',   // 月報修正時の指導者種別
 };
 
@@ -256,15 +257,11 @@ async function loadDetailFee(name, year, month) {
       return;
     }
     const r = res.result;
-    AdminState.currentCalcId = res.calcId || null;
+    AdminState.currentCalcId      = res.calcId || null;
+    AdminState.currentTravelTotal = Number(r.travelTotal) || 0;
     console.log('[loadDetailFee] calcId取得:', AdminState.currentCalcId,
       '| fee:', r.fee, '| withholding:', r.withholding, '| netPay:', r.netPay);
-    document.getElementById('detail-fee-result').innerHTML = `
-      <div class="fee-row"><span>謝金総額</span><span class="fw-bold">¥${Number(r.fee).toLocaleString()}</span></div>
-      <div class="fee-row deduction"><span>源泉徴収額</span><span>−¥${Number(r.withholding).toLocaleString()}</span></div>
-      <div class="fee-row net"><span>差引支払額</span><span>¥${Number(r.netPay).toLocaleString()}</span></div>
-      <div class="fee-row"><span>旅費合計</span><span>¥${Number(r.travelTotal).toLocaleString()}</span></div>
-    `;
+    renderFeeResult(Number(r.fee), Number(r.withholding), Number(r.netPay), AdminState.currentTravelTotal);
     document.getElementById('edit-fee').value         = r.fee;
     document.getElementById('edit-withholding').value = r.withholding;
     document.getElementById('edit-net').value         = r.netPay;
@@ -273,6 +270,15 @@ async function loadDetailFee(name, year, month) {
     AdminState.currentCalcId = null;
     document.getElementById('detail-fee-result').innerHTML = '<p class="text-muted">計算エラー: ' + esc(e.message) + '</p>';
   }
+}
+
+function renderFeeResult(fee, withholding, netPay, travelTotal) {
+  document.getElementById('detail-fee-result').innerHTML = `
+    <div class="fee-row"><span>謝金総額</span><span class="fw-bold">¥${fee.toLocaleString()}</span></div>
+    <div class="fee-row deduction"><span>源泉徴収額</span><span>−¥${withholding.toLocaleString()}</span></div>
+    <div class="fee-row net"><span>差引支払額</span><span>¥${netPay.toLocaleString()}</span></div>
+    <div class="fee-row"><span>旅費合計</span><span>¥${travelTotal.toLocaleString()}</span></div>
+  `;
 }
 
 function autoCalcNetPay() {
@@ -312,6 +318,7 @@ async function saveFeeEdit() {
     const res = await gasPost({ action: 'updateFee', calcId: AdminState.currentCalcId, overrides });
     console.log('[saveFeeEdit] GASレスポンス:', res);
     if (!res.success) throw new Error(res.error);
+    renderFeeResult(feeVal, withholdingVal, netPay, AdminState.currentTravelTotal);
     showToast('謝金を修正しました', 'success');
   } catch (e) {
     console.error('[saveFeeEdit] 失敗:', e);
