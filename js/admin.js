@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('db-load-btn').addEventListener('click', loadDashboard);
   document.getElementById('detail-load-btn').addEventListener('click', loadDetail);
   document.getElementById('fee-load-btn').addEventListener('click', loadFeeResults);
+  document.getElementById('fee-force-calc-btn').addEventListener('click', forceCalcFeeResults);
   document.getElementById('fee-export-btn').addEventListener('click', exportFeeSheet);
   document.getElementById('fee-transfer-btn').addEventListener('click', generateTransferSheet);
   document.getElementById('fee-club-summary-btn').addEventListener('click', generateClubSummarySheet);
@@ -350,6 +351,28 @@ async function loadFeeResults() {
     AdminState.feeResults = res.data || [];
     if (AdminState.feeResults.length === 0) {
       showToast(res.message || '提出済みの月報がありません', 'error');
+    }
+    renderFeeTable(AdminState.feeResults);
+  } catch (e) {
+    showToast('謝金データの取得に失敗しました: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function forceCalcFeeResults() {
+  const year  = document.getElementById('fee-year').value;
+  const month = document.getElementById('fee-month').value;
+  if (!confirm('修正済みの謝金データを含め、全員分を強制再計算します。\n手動修正した金額は失われます。よろしいですか？')) return;
+  showLoading();
+  try {
+    const res = await gasPost({ action: 'calcAllFees', year: parseInt(year), month: parseInt(month), forceRecalc: true });
+    if (!res.success) throw new Error(res.error);
+    AdminState.feeResults = res.data || [];
+    if (AdminState.feeResults.length === 0) {
+      showToast(res.message || '提出済みの月報がありません', 'error');
+    } else {
+      showToast('強制再計算が完了しました', 'success');
     }
     renderFeeTable(AdminState.feeResults);
   } catch (e) {
