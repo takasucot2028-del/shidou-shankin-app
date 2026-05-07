@@ -381,14 +381,42 @@ function getExistingFeeResult(instructorName, year, month) {
  * 指定年月の提出済み月報がある全指導者の謝金を計算・保存して返す
  * body: { year, month, forceRecalc }
  * forceRecalc=true の場合、修正フラグを無視して全員を再計算する
+ *
+ * 【パフォーマンス最適化】
+ * 月報・マスタ・謝金結果シートを各1回だけ読み込み、計算はメモリ上で完結し、
+ * 最後にsetValues()で一括書き込みする。flush()は最後に1回だけ呼ぶ。
  */
 function calcAllFees(body) {
   const year = parseInt(body.year);
   const month = parseInt(body.month);
   const forceRecalc = !!body.forceRecalc;
 
+  Logger.log('[calcAllFees] 開始: year=%s, month=%s, forceRecalc=%s', year, month, forceRecalc);
+
+  // 1. 月報データを1回だけ全件読み込む
   const reportSheet = getOrCreateReportSheet(year);
   const reportData = reportSheet.getDataRange().getValues().slice(1);
+
+  // 2. 指導者マスタを1回だけ全件読み込んでマップ化する
+  const masterSheet = getSheet('指導者マスタ');
+  const masterRows = masterSheet.getDataRange().getValues().slice(1);
+  const instructorMap = {};
+  masterRows.forEach(row => {
+    if (row[1]) {
+      const n = String(row[1]).trim();
+      instructorMap[n] = {
+        name: n,
+        clubName: String(row[2]).trim(),
+        rateType: String(row[3]).trim(),
+        type:     String(row[4]).trim(),
+      };
+    }
+  });
+
+  // 3. 謝金計算結果シートを1回だけ全件読み込む
+  const feeSheet = getOrCreateFeeSheet();
+  const feeData = feeSheet.getDataRange().getValues();
+  const feeColCount = feeData.length > 0 ? feeData[0].length : 15;
 
   // 対象年月・提出済みの指導者名を重複なく収集
   const nameSet = {};
@@ -396,7 +424,7 @@ function calcAllFees(body) {
     if (parseInt(row[COL.YEAR]) === year &&
         parseInt(row[COL.MONTH]) === month &&
         row[COL.STATUS] === '提出済') {
-      nameSet[row[COL.INSTRUCTOR_NAME]] = true;
+      nameSet[String(row[COL.INSTRUCTOR_NAME]).trim()] = true;
     }
   });
 
@@ -405,45 +433,41 @@ function calcAllFees(body) {
     return { success: true, data: [], message: '対象年月に提出済み月報がありません' };
   }
 
-  const feeSheet = getOrCreateFeeSheet();
-  const feeData = feeSheet.getDataRange().getValues();
-
   // 修正フラグTRUEの既存結果を収集（通常計算時のみ）
   const modifiedResults = {};
   if (!forceRecalc) {
     for (let i = 1; i < feeData.length; i++) {
       if (matchYearMonth(feeData[i][2], year, month) && feeData[i][14] === true) {
-        const name = String(feeData[i][1]).trim();
-        modifiedResults[name] = feeData[i];
+        const n = String(feeData[i][1]).trim();
+        modifiedResults[n] = feeData[i];
       }
     }
     Logger.log('[calcAllFees] 修正フラグTRUEの指導者数: %s', Object.keys(modifiedResults).length);
   }
 
-  // 対象行を削除（forceRecalc=trueなら全行、falseなら修正なし行のみ）
-  Logger.log('[calcAllFees] 一括削除開始: year=%s, month=%s, forceRecalc=%s, 現在の総行数(ヘッダー含む)=%s', year, month, forceRecalc, feeData.length);
-  let bulkDeleted = 0;
-  for (let i = feeData.length - 1; i >= 1; i--) {
-    if (matchYearMonth(feeData[i][2], year, month)) {
-      if (forceRecalc || feeData[i][14] !== true) {
-        Logger.log('[calcAllFees] 削除: row=%s, 氏名="%s"', i + 1, feeData[i][1]);
-        feeSheet.deleteRow(i + 1);
-        bulkDeleted++;
-      }
+  // 4. 謝金計算結果シートの残す行を収集（削除対象以外をメモリ上で選別）
+  const keepRows = [];
+  for (let i = 1; i < feeData.length; i++) {
+    const isTarget = matchYearMonth(feeData[i][2], year, month);
+    if (!isTarget || (!forceRecalc && feeData[i][14] === true)) {
+      keepRows.push(feeData[i]);
     }
   }
-  Logger.log('[calcAllFees] 一括削除完了: 削除件数=%s, 残行数(ヘッダー含む)=%s', bulkDeleted, feeSheet.getLastRow());
+  Logger.log('[calcAllFees] 削除件数=%s, 残存件数=%s', (feeData.length - 1 - keepRows.length), keepRows.length);
 
+  // 5. 全計算をメモリ上で実行し、結果を配列に蓄積する
   const results = [];
+  const newFeeRows = [];
+  const reportCalcHoursMap = {}; // key: submitId+"|"+date → calcHours
 
   // 修正済み指導者の結果をそのまま追加（強制再計算でない場合）
   if (!forceRecalc) {
-    Object.keys(modifiedResults).forEach(name => {
-      const row = modifiedResults[name];
-      const instructor = findInstructor(name) || {};
+    Object.keys(modifiedResults).forEach(n => {
+      const row = modifiedResults[n];
+      const inst = instructorMap[n] || {};
       results.push({
-        '指導者氏名': name,
-        'クラブ名': instructor.clubName || '',
+        '指導者氏名': n,
+        'クラブ名': inst.clubName || '',
         '平日謝金計算時間':     Number(row[3])  || 0,
         '休日謝金計算時間':     Number(row[4])  || 0,
         '長期休暇謝金計算時間': Number(row[5])  || 0,
@@ -457,36 +481,121 @@ function calcAllFees(body) {
     });
   }
 
-  // 未計算（または強制再計算）の指導者を計算
+  // 未計算（または強制再計算）の指導者をメモリ上で計算
   names.forEach(name => {
-    if (!forceRecalc && modifiedResults[name]) {
-      return; // 修正済みはスキップ
+    if (!forceRecalc && modifiedResults[name]) return;
+
+    const instructor = instructorMap[name];
+    if (!instructor) {
+      Logger.log('[calcAllFees] 指導者マスタ未登録: "%s"', name);
+      return;
     }
-    try {
-      // skipDelete=true: 上の一括削除で既存行は消えているため saveFeeResult 内の削除をスキップ
-      // forceRecalc=true: calcFee 内の修正フラグチェックをスキップして必ず再計算
-      const res = calcFee({ instructorName: name, year, month, forceRecalc: true }, true);
-      if (res.success) {
-        const instructor = findInstructor(name) || {};
-        results.push({
-          '指導者氏名': name,
-          'クラブ名': instructor.clubName || '',
-          '平日謝金計算時間':     res.result.categoryHours['平日']     || 0,
-          '休日謝金計算時間':     res.result.categoryHours['休日']     || 0,
-          '長期休暇謝金計算時間': res.result.categoryHours['長期休暇'] || 0,
-          '大会引率謝金計算時間': res.result.categoryHours['大会引率'] || 0,
-          '謝金総額':   res.result.fee,
-          '源泉徴収額': res.result.withholding,
-          '差引支払額': res.result.netPay,
-          '旅費総額':   res.result.travelTotal,
-          '修正フラグ': false,
-        });
+
+    const rows = reportData.filter(row =>
+      String(row[COL.INSTRUCTOR_NAME]).trim() === name &&
+      parseInt(row[COL.YEAR]) === year &&
+      parseInt(row[COL.MONTH]) === month &&
+      row[COL.STATUS] === '提出済'
+    );
+
+    if (rows.length === 0) return;
+
+    let mainCalcHours = 0;
+    let subCalcHours = 0;
+    let travelTotal = 0;
+    const categoryHours = { '平日': 0, '休日': 0, '長期休暇': 0, '大会引率': 0 };
+
+    rows.forEach(row => {
+      const calcHours = calcInstructionHours(
+        row[COL.START_TIME],
+        row[COL.END_TIME],
+        row[COL.CATEGORY],
+        instructor.type
+      );
+
+      // 月報シートへの書き込みをマップに蓄積（実際の書き込みは後でまとめて行う）
+      const key = String(row[COL.SUBMIT_ID]) + '|' + String(row[COL.DATE]);
+      reportCalcHoursMap[key] = calcHours;
+
+      categoryHours[row[COL.CATEGORY]] = (categoryHours[row[COL.CATEGORY]] || 0) + calcHours;
+
+      if (row[COL.RATE_TYPE] === 'メイン') {
+        mainCalcHours += calcHours;
+      } else {
+        subCalcHours += calcHours;
       }
-    } catch (e) {
-      Logger.log('[calcAllFees] エラー: 指導者="%s", エラー=%s', name, e.message);
-    }
+
+      travelTotal += parseFloat(row[COL.TRAVEL_AMOUNT]) || 0;
+    });
+
+    const fee = Math.round(mainCalcHours * HOURLY_RATE['メイン'] + subCalcHours * HOURLY_RATE['サブ']);
+    const withholding = Math.floor(fee * WITHHOLDING_TAX_RATE);
+    const netPay = fee - withholding;
+    const ymLabel = year + '年' + month + '月';
+    const calcId = generateUUID();
+
+    newFeeRows.push([
+      calcId, name, ymLabel,
+      categoryHours['平日']     || 0,
+      categoryHours['休日']     || 0,
+      categoryHours['長期休暇'] || 0,
+      categoryHours['大会引率'] || 0,
+      mainCalcHours, subCalcHours,
+      fee, withholding, netPay, travelTotal,
+      new Date(), false,
+    ]);
+
+    results.push({
+      '指導者氏名': name,
+      'クラブ名': instructor.clubName || '',
+      '平日謝金計算時間':     categoryHours['平日']     || 0,
+      '休日謝金計算時間':     categoryHours['休日']     || 0,
+      '長期休暇謝金計算時間': categoryHours['長期休暇'] || 0,
+      '大会引率謝金計算時間': categoryHours['大会引率'] || 0,
+      '謝金総額':   fee,
+      '源泉徴収額': withholding,
+      '差引支払額': netPay,
+      '旅費総額':   travelTotal,
+      '修正フラグ': false,
+    });
   });
 
+  // 6. 謝金計算結果シートを一括書き込み（clearContents + setValues で deleteRow 不要）
+  feeSheet.clearContents();
+  feeSheet.getRange(1, 1, 1, feeColCount).setValues([feeData[0]]);
+  const allFeeRows = keepRows.concat(newFeeRows);
+  if (allFeeRows.length > 0) {
+    feeSheet.getRange(2, 1, allFeeRows.length, feeColCount).setValues(allFeeRows);
+  }
+  // 新規追加行のC列（対象年月）をテキスト形式に設定
+  if (newFeeRows.length > 0) {
+    feeSheet.getRange(keepRows.length + 2, 3, newFeeRows.length, 1).setNumberFormat('@STRING@');
+  }
+  Logger.log('[calcAllFees] 謝金計算結果シート書き込み完了: 残存=%s, 新規=%s', keepRows.length, newFeeRows.length);
+
+  // 7. 月報シートの謝金計算時間列を一括更新
+  if (Object.keys(reportCalcHoursMap).length > 0) {
+    const reportIndexMap = {};
+    reportData.forEach((row, i) => {
+      const key = String(row[COL.SUBMIT_ID]) + '|' + String(row[COL.DATE]);
+      reportIndexMap[key] = i;
+    });
+
+    // CALC_HOURS列の全値をメモリ上で更新してから一括書き込み
+    const calcHoursCol = reportData.map(row => [row[COL.CALC_HOURS]]);
+    Object.keys(reportCalcHoursMap).forEach(key => {
+      const idx = reportIndexMap[key];
+      if (idx !== undefined) calcHoursCol[idx][0] = reportCalcHoursMap[key];
+    });
+
+    reportSheet.getRange(2, COL.CALC_HOURS + 1, calcHoursCol.length, 1).setValues(calcHoursCol);
+    Logger.log('[calcAllFees] 月報シート謝金計算時間一括更新完了: %s行', calcHoursCol.length);
+  }
+
+  // 8. SpreadsheetApp.flush() を最後に1回だけ呼ぶ
+  SpreadsheetApp.flush();
+
+  Logger.log('[calcAllFees] 完了: 指導者数=%s', results.length);
   return { success: true, data: results };
 }
 
