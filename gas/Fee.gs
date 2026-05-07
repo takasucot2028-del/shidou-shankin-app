@@ -267,6 +267,8 @@ function saveFeeResult(instructorName, year, month, result, clubName, skipDelete
   const lastRow = sheet.getLastRow() + 1;
   Logger.log('[saveFeeResult] 新規挿入: row=%s, 指導者="%s", 年月="%s"', lastRow, instructorName, ymLabel);
   writeFeeRow(sheet, lastRow, calcId, instructorName, ymLabel, result);
+  SpreadsheetApp.flush();
+  Logger.log('[saveFeeResult] flush完了: calcId="%s"', calcId);
   return calcId;
 }
 

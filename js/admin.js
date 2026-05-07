@@ -272,13 +272,22 @@ async function loadDetailFee(name, year, month) {
   }
 }
 
-function renderFeeResult(fee, withholding, netPay, travelTotal) {
-  document.getElementById('detail-fee-result').innerHTML = `
+function renderFeeResult(fee, withholding, netPay, travelTotal, highlight = false) {
+  console.log('[renderFeeResult] 呼び出し | fee:', fee, '| withholding:', withholding, '| netPay:', netPay, '| travelTotal:', travelTotal);
+  const el = document.getElementById('detail-fee-result');
+  if (!el) { console.error('[renderFeeResult] detail-fee-result 要素が見つかりません'); return; }
+  el.innerHTML = `
     <div class="fee-row"><span>謝金総額</span><span class="fw-bold">¥${fee.toLocaleString()}</span></div>
     <div class="fee-row deduction"><span>源泉徴収額</span><span>−¥${withholding.toLocaleString()}</span></div>
     <div class="fee-row net"><span>差引支払額</span><span>¥${netPay.toLocaleString()}</span></div>
     <div class="fee-row"><span>旅費合計</span><span>¥${travelTotal.toLocaleString()}</span></div>
   `;
+  if (highlight) {
+    el.classList.remove('fee-result-updated');
+    void el.offsetWidth;
+    el.classList.add('fee-result-updated');
+  }
+  console.log('[renderFeeResult] DOM更新完了');
 }
 
 function autoCalcNetPay() {
@@ -318,7 +327,8 @@ async function saveFeeEdit() {
     const res = await gasPost({ action: 'updateFee', calcId: AdminState.currentCalcId, overrides });
     console.log('[saveFeeEdit] GASレスポンス:', res);
     if (!res.success) throw new Error(res.error);
-    renderFeeResult(feeVal, withholdingVal, netPay, AdminState.currentTravelTotal);
+    console.log('[saveFeeEdit] renderFeeResult呼び出し | fee:', feeVal, '| withholding:', withholdingVal, '| netPay:', netPay);
+    renderFeeResult(feeVal, withholdingVal, netPay, AdminState.currentTravelTotal, true);
     showToast('謝金を修正しました', 'success');
   } catch (e) {
     console.error('[saveFeeEdit] 失敗:', e);

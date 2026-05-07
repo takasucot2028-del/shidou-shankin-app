@@ -166,6 +166,36 @@
 .fee-total-bar .label { font-size: var(--font-size-sm); opacity: 0.85; }
 .fee-total-bar .value { font-size: 24px; font-weight: 800; }
 
+/* 謝金計算結果（detail-fee-result 内） */
+.fee-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border-light);
+  font-size: var(--font-size-sm);
+}
+.fee-row:last-child { border-bottom: none; }
+.fee-row.deduction { color: var(--color-danger); }
+.fee-row.net {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-danger);
+  border-top: 2px solid var(--color-border);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+/* 謝金更新時のハイライトアニメーション */
+@keyframes fee-updated {
+  0%   { background: #e8f5e9; }
+  100% { background: transparent; }
+}
+.fee-result-updated {
+  animation: fee-updated 1.2s ease-out forwards;
+  border-radius: var(--radius);
+  padding: 4px 8px;
+}
+
 /* 修正フォーム */
 .fee-edit-form {
   display: flex;
