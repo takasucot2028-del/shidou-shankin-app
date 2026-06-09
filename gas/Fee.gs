@@ -552,6 +552,8 @@ function calcAllFees(body) {
       '休日謝金計算時間':     categoryHours['休日']     || 0,
       '長期休暇謝金計算時間': categoryHours['長期休暇'] || 0,
       '大会引率謝金計算時間': categoryHours['大会引率'] || 0,
+      'メイン単価適用時間':   mainCalcHours,
+      'サブ単価適用時間':     subCalcHours,
       '謝金総額':   fee,
       '源泉徴収額': withholding,
       '差引支払額': netPay,
