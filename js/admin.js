@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fee-club-summary-btn').addEventListener('click', generateClubSummarySheet);
   document.getElementById('slip-preview-btn').addEventListener('click', previewSlip);
   document.getElementById('slip-print-btn').addEventListener('click', () => window.print());
+  document.getElementById('slip-bulk-print-btn').addEventListener('click', printAllSlips);
   document.getElementById('slip-email-btn').addEventListener('click', bulkSendPaySlipEmails);
   document.getElementById('save-fee-edit-btn').addEventListener('click', saveFeeEdit);
   document.getElementById('edit-fee').addEventListener('input', autoCalcNetPay);
@@ -612,7 +613,7 @@ function calcPaymentDate(reportYear, reportMonth) {
 
 // ========== 給与明細レンダリング ==========
 
-function renderSlip(inst, fee, year, month) {
+function buildSlipHTML(inst, fee, year, month) {
   const today    = new Date();
   const payDate  = calcPaymentDate(year, month);
   const instrName   = inst['氏名'] || inst.name || '';
@@ -624,7 +625,7 @@ function renderSlip(inst, fee, year, month) {
   const accountType = inst['口座種別'] || '';
   const accountNum  = inst['口座番号'] || '';
 
-  document.getElementById('slip-content').innerHTML = `
+  return `
     <div class="slip-org-name">一般社団法人たかすスポーツクラブ</div>
     <h2>指導謝金支払明細書</h2>
     <dl class="slip-meta">
@@ -652,8 +653,172 @@ function renderSlip(inst, fee, year, month) {
       <div class="slip-amount-row net"><span>差引支払額</span><span>¥${Number(fee['差引支払額'] || 0).toLocaleString()}</span></div>
       <div class="slip-amount-row travel-section"><span>旅費</span><span>¥${Number(fee['旅費総額'] || 0).toLocaleString()}</span></div>
     </div>
-
   `;
+}
+
+function renderSlip(inst, fee, year, month) {
+  document.getElementById('slip-content').innerHTML = buildSlipHTML(inst, fee, year, month);
+}
+
+async function printAllSlips() {
+  const year  = parseInt(document.getElementById('slip-year').value);
+  const month = parseInt(document.getElementById('slip-month').value);
+
+  showLoading();
+  try {
+    const res = await gasPost({ action: 'calcAllFees', year, month });
+    if (!res.success) throw new Error(res.error);
+
+    const allFees = (res.data || []).filter(r => Number(r['謝金総額'] || 0) > 0);
+    if (allFees.length === 0) {
+      showToast('謝金が発生している指導者がいません', 'error');
+      return;
+    }
+
+    const slipHTMLs = allFees.map(feeRow => {
+      const instrName = feeRow['指導者氏名'];
+      const inst = AdminState.instructors.find(i => (i['氏名'] || i.name) === instrName) || {};
+      const feeData = {
+        '謝金総額':             feeRow['謝金総額'],
+        '源泉徴収額':           feeRow['源泉徴収額'],
+        '差引支払額':           feeRow['差引支払額'],
+        '旅費総額':             feeRow['旅費総額'],
+        'メイン単価適用時間':   feeRow['メイン単価適用時間'],
+        'サブ単価適用時間':     feeRow['サブ単価適用時間'],
+        '平日謝金計算時間':     feeRow['平日謝金計算時間'],
+        '休日謝金計算時間':     feeRow['休日謝金計算時間'],
+        '長期休暇謝金計算時間': feeRow['長期休暇謝金計算時間'],
+        '大会引率謝金計算時間': feeRow['大会引率謝金計算時間'],
+      };
+      return buildSlipHTML(inst, feeData, year, month);
+    });
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      showToast('ポップアップがブロックされました。ブラウザの設定でポップアップを許可してください', 'error');
+      return;
+    }
+    printWin.document.open();
+    printWin.document.write(buildBulkPrintHTML(slipHTMLs, year, month));
+    printWin.document.close();
+  } catch (e) {
+    showToast('一括印刷に失敗しました: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function buildBulkPrintHTML(slipHTMLs, year, month) {
+  const pages = slipHTMLs.map(html => `<div class="slip-page">${html}</div>`).join('');
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>${year}年${month}月分 給与明細一括印刷（${slipHTMLs.length}名）</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #1a1a2e;
+      background: #fff;
+    }
+    .slip-page {
+      padding: 15mm;
+      width: 210mm;
+      page-break-after: always;
+      break-after: page;
+    }
+    .slip-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    .slip-org-name {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #555;
+    }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 24px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #1a1a2e;
+    }
+    dl.slip-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 24px;
+      margin-bottom: 20px;
+      font-size: 13px;
+    }
+    dl.slip-meta dt { color: #555; }
+    dl.slip-meta dd { font-weight: 600; }
+    .slip-detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      font-size: 12px;
+    }
+    .slip-detail-table th {
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    .slip-detail-table td {
+      border: 1px solid #ccc;
+      padding: 6px 10px;
+      text-align: right;
+    }
+    .slip-detail-table td:first-child { text-align: left; }
+    .slip-amount-box {
+      border: 2px solid #e53935;
+      border-radius: 4px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .slip-amount-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 13px;
+    }
+    .slip-amount-row.net {
+      font-size: 18px;
+      font-weight: 800;
+      color: #e53935;
+      border-top: 2px solid #e53935;
+      margin-top: 8px;
+      padding-top: 8px;
+    }
+    .slip-amount-row.travel-section {
+      margin-top: 12px;
+      border-top: 1px solid #e0e0e0;
+      padding-top: 8px;
+    }
+    .text-center { text-align: center; }
+    .text-muted { color: #888; }
+    @page { size: A4 portrait; margin: 0; }
+    @media screen {
+      body { background: #e0e0e0; }
+      .slip-page {
+        background: #fff;
+        margin: 20px auto;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      }
+    }
+  </style>
+</head>
+<body>
+  ${pages}
+  <script>window.print();<\/script>
+</body>
+</html>`;
 }
 
 function buildSlipDetailRows(inst, fee) {
