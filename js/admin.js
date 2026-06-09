@@ -182,6 +182,23 @@ function jumpToDetail(name) {
 
 // ========== 月報詳細 ==========
 
+// 個人表示と一括印刷で共有する行HTML生成ヘルパー
+function buildDetailRowHTML(r) {
+  return `<tr>
+    <td>${esc(r.date || '')}</td>
+    <td>${esc(r.category || '')}</td>
+    <td>${esc(r.rateType || '')}</td>
+    <td>${esc(r.startTime || '')}</td>
+    <td>${esc(r.endTime || '')}</td>
+    <td class="text-right">${r.instructionHours || 0}h</td>
+    <td class="text-right fw-bold">${r.calcHours || 0}h</td>
+    <td>${esc(r.transport || '')}</td>
+    <td>${esc(r.destination || '')}</td>
+    <td class="text-right">${r.travelAmount ? '¥' + Number(r.travelAmount).toLocaleString() : '—'}</td>
+    <td>${esc(r.note || '')}</td>
+  </tr>`;
+}
+
 async function loadDetail() {
   const name  = document.getElementById('detail-instructor').value;
   const year  = document.getElementById('detail-year').value;
@@ -216,21 +233,7 @@ async function loadDetail() {
     `;
 
     // 明細テーブル
-    document.getElementById('detail-tbody').innerHTML = res.data.map(r => `
-      <tr>
-        <td>${esc(r.date || '')}</td>
-        <td>${esc(r.category || '')}</td>
-        <td>${esc(r.rateType || '')}</td>
-        <td>${esc(r.startTime || '')}</td>
-        <td>${esc(r.endTime || '')}</td>
-        <td class="text-right">${r.instructionHours || 0}h</td>
-        <td class="text-right fw-bold">${r.calcHours || 0}h</td>
-        <td>${esc(r.transport || '')}</td>
-        <td>${esc(r.destination || '')}</td>
-        <td class="text-right">${r.travelAmount ? '¥' + Number(r.travelAmount).toLocaleString() : '—'}</td>
-        <td>${esc(r.note || '')}</td>
-      </tr>
-    `).join('');
+    document.getElementById('detail-tbody').innerHTML = res.data.map(buildDetailRowHTML).join('');
 
     // 謝金計算結果
     await loadDetailFee(name, year, month);
@@ -654,6 +657,15 @@ function buildSlipHTML(inst, fee, year, month) {
       <div class="slip-amount-row net"><span>差引支払額</span><span>¥${Number(fee['差引支払額'] || 0).toLocaleString()}</span></div>
       <div class="slip-amount-row travel-section"><span>旅費</span><span>¥${Number(fee['旅費総額'] || 0).toLocaleString()}</span></div>
     </div>
+
+    <div class="slip-sign">
+      <div class="slip-sign-box">
+        <div class="slip-sign-label">指導者署名・押印</div>
+      </div>
+      <div class="slip-sign-box">
+        <div class="slip-sign-label">確認者署名・押印</div>
+      </div>
+    </div>
   `;
 }
 
@@ -761,60 +773,70 @@ async function printAllReports() {
 }
 
 function buildReportPrintHTML(inst, rows, year, month) {
-  const instrName = inst['氏名']      || inst.name     || (rows[0] && rows[0].instructorName) || '';
-  const clubName  = inst['クラブ名']  || inst.clubName || (rows[0] && rows[0].clubName)       || '';
+  const first     = rows[0] || {};
+  const instrName = inst['氏名']      || inst.name     || first.instructorName || '';
+  const clubName  = inst['クラブ名']  || inst.clubName || first.clubName       || '';
   const rateType  = inst['区分']      || inst.rateType  || '';
   const instrType = inst['指導者種別'] || inst.type      || '';
+  const status      = first.status      || '';
+  const submittedAt = first.submittedAt ? fmtDate(first.submittedAt) : '—';
 
   const totalCalcH  = rows.reduce((s, r) => s + (Number(r.calcHours) || 0), 0);
   const totalTravel = rows.reduce((s, r) => s + (Number(r.travelAmount) || 0), 0);
-
-  const detailRows = rows.map(r => `
-    <tr>
-      <td>${esc(r.date || '')}</td>
-      <td>${esc(r.category || '')}</td>
-      <td>${esc(r.rateType || '')}</td>
-      <td>${esc(r.startTime || '')}</td>
-      <td>${esc(r.endTime || '')}</td>
-      <td class="num">${r.instructionHours != null ? r.instructionHours + 'h' : '—'}</td>
-      <td class="num">${r.calcHours != null ? r.calcHours + 'h' : '—'}</td>
-      <td>${esc(r.transport || '')}</td>
-      <td>${esc(r.destination || '')}</td>
-      <td class="num">${r.travelAmount ? '¥' + Number(r.travelAmount).toLocaleString() : '—'}</td>
-      <td>${esc(r.note || '')}</td>
-    </tr>
-  `).join('');
+  const statusClass = status === '提出済' ? 'badge-success' : 'badge-warning';
 
   return `
     <div class="report-issuer">一般社団法人たかすスポーツクラブ</div>
     <h2 class="report-title">部活動地域展開 指導月報</h2>
-    <dl class="report-meta">
-      <dt>対象年月</dt>    <dd>${year}年${month}月分</dd>
-      <dt>指導者氏名</dt>  <dd>${esc(instrName)}</dd>
-      <dt>クラブ名</dt>    <dd>${esc(clubName)}</dd>
-      <dt>区分</dt>        <dd>${esc(rateType)}</dd>
-      <dt>指導者種別</dt>  <dd>${esc(instrType)}</dd>
-    </dl>
 
-    <table class="report-table">
-      <thead>
-        <tr>
-          <th>日付</th><th>区分</th><th>時給区分</th>
-          <th>開始</th><th>終了</th><th>指導時間</th><th>計算時間</th>
-          <th>交通手段</th><th>行先</th><th>旅費</th><th>備考</th>
-        </tr>
-      </thead>
-      <tbody>${detailRows}</tbody>
-      <tfoot>
-        <tr>
-          <td colspan="6" class="summary-label">計算時間合計</td>
-          <td class="num summary-val">${totalCalcH}h</td>
-          <td colspan="2" class="summary-label">旅費合計</td>
-          <td class="num summary-val">¥${totalTravel.toLocaleString()}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
+    <div class="detail-meta">
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">指導者</span>
+        <span class="detail-meta-value">${esc(instrName)}</span>
+      </div>
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">クラブ名</span>
+        <span class="detail-meta-value">${esc(clubName)}</span>
+      </div>
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">対象年月</span>
+        <span class="detail-meta-value">${year}年${month}月</span>
+      </div>
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">区分</span>
+        <span class="detail-meta-value">${esc(rateType)} / ${esc(instrType)}</span>
+      </div>
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">ステータス</span>
+        <span class="detail-meta-value"><span class="badge ${statusClass}">${esc(status)}</span></span>
+      </div>
+      <div class="detail-meta-item">
+        <span class="detail-meta-label">提出日時</span>
+        <span class="detail-meta-value">${submittedAt}</span>
+      </div>
+    </div>
+
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>日付</th><th>区分</th><th>時給区分</th>
+            <th>開始</th><th>終了</th><th>指導時間</th><th>計算時間</th>
+            <th>交通手段</th><th>行先</th><th>旅費</th><th>備考</th>
+          </tr>
+        </thead>
+        <tbody>${rows.map(buildDetailRowHTML).join('')}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="6" class="text-right">計算時間合計</td>
+            <td class="text-right fw-bold">${totalCalcH}h</td>
+            <td colspan="2" class="text-right">旅費合計</td>
+            <td class="text-right fw-bold">¥${totalTravel.toLocaleString()}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
 
     <div class="report-sign">
       <div class="sign-box">
@@ -840,9 +862,9 @@ function buildBulkReportPrintHTML(reportHTMLs, year, month) {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
-      font-size: 12px;
-      line-height: 1.6;
-      color: #1a1a2e;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #2c3e50;
       background: #fff;
     }
     .report-page {
@@ -856,10 +878,11 @@ function buildBulkReportPrintHTML(reportHTMLs, year, month) {
       page-break-after: auto;
       break-after: auto;
     }
+    /* ヘッダー */
     .report-issuer {
       text-align: center;
       font-size: 11px;
-      color: #555;
+      color: #6c757d;
       margin-bottom: 4px;
     }
     .report-title {
@@ -868,38 +891,63 @@ function buildBulkReportPrintHTML(reportHTMLs, year, month) {
       text-align: center;
       margin-bottom: 12px;
       padding-bottom: 6px;
-      border-bottom: 2px solid #1a1a2e;
+      border-bottom: 2px solid #2c3e50;
     }
-    dl.report-meta {
+    /* メタ情報（個人表示の detail-meta と同一） */
+    .detail-meta {
       display: grid;
-      grid-template-columns: 90px 1fr 90px 1fr;
-      gap: 3px 12px;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
       margin-bottom: 12px;
+      background: #f4f6f9;
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+    .detail-meta-item { display: flex; flex-direction: column; gap: 2px; }
+    .detail-meta-label { font-size: 12px; color: #6c757d; }
+    .detail-meta-value { font-weight: 600; font-size: 13px; }
+    /* バッジ */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 10px;
+      border-radius: 20px;
       font-size: 12px;
-    }
-    dl.report-meta dt { color: #555; }
-    dl.report-meta dd { font-weight: 600; }
-    .report-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 12px;
-      font-size: 10px;
-    }
-    .report-table th {
-      background: #f0f0f0;
-      border: 1px solid #bbb;
-      padding: 4px 5px;
-      text-align: center;
+      font-weight: 600;
       white-space: nowrap;
     }
-    .report-table td {
-      border: 1px solid #bbb;
-      padding: 4px 5px;
+    .badge-success { background: #d4edda; color: #155724; }
+    .badge-warning { background: #fff3cd; color: #856404; }
+    /* テーブル（個人表示の data-table と同一） */
+    .table-wrapper { overflow-x: auto; margin-bottom: 12px; }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
     }
-    .report-table td.num { text-align: right; }
-    .report-table tfoot td { background: #fafafa; font-weight: 600; }
-    .report-table tfoot .summary-label { text-align: right; color: #555; }
-    .report-table tfoot .summary-val { font-size: 11px; }
+    .data-table th {
+      background: #e8f0fb;
+      color: #1a56a0;
+      font-weight: 700;
+      padding: 6px 8px;
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 2px solid #1a56a0;
+    }
+    .data-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #f0f0f0;
+      vertical-align: middle;
+    }
+    .data-table tfoot td {
+      background: #f4f6f9;
+      font-weight: 600;
+      border-top: 2px solid #dee2e6;
+      border-bottom: none;
+    }
+    .text-right { text-align: right; }
+    .fw-bold { font-weight: 700; }
+    /* 署名欄 */
     .report-sign {
       display: flex;
       gap: 20px;
@@ -907,15 +955,16 @@ function buildBulkReportPrintHTML(reportHTMLs, year, month) {
     }
     .sign-box {
       flex: 1;
-      border: 1px solid #aaa;
+      border: 1px solid #dee2e6;
       border-radius: 4px;
       overflow: hidden;
     }
     .sign-label {
-      background: #f0f0f0;
+      background: #f4f6f9;
       padding: 4px 8px;
       font-size: 11px;
-      border-bottom: 1px solid #aaa;
+      color: #6c757d;
+      border-bottom: 1px solid #dee2e6;
     }
     .sign-area { height: 36mm; }
     @page { size: A4 portrait; margin: 0; }
@@ -1005,7 +1054,7 @@ function buildBulkPrintHTML(slipHTMLs, year, month) {
     }
     .slip-detail-table td:first-child { text-align: left; }
     .slip-amount-box {
-      border: 2px solid #e53935;
+      border: 2px solid #dc3545;
       border-radius: 4px;
       padding: 16px;
       margin-bottom: 20px;
@@ -1019,16 +1068,29 @@ function buildBulkPrintHTML(slipHTMLs, year, month) {
     .slip-amount-row.net {
       font-size: 18px;
       font-weight: 800;
-      color: #e53935;
-      border-top: 2px solid #e53935;
+      color: #dc3545;
+      border-top: 2px solid #dc3545;
       margin-top: 8px;
       padding-top: 8px;
     }
     .slip-amount-row.travel-section {
       margin-top: 12px;
-      border-top: 1px solid #e0e0e0;
+      border-top: 1px solid #dee2e6;
       padding-top: 8px;
     }
+    .slip-sign {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 24px;
+    }
+    .slip-sign-box {
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 12px;
+      min-height: 60px;
+    }
+    .slip-sign-label { font-size: 11px; color: #6c757d; margin-bottom: 4px; }
     .text-center { text-align: center; }
     .text-muted { color: #888; }
     @page { size: A4 portrait; margin: 0; }
