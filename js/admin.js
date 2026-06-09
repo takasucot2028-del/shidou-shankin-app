@@ -738,10 +738,17 @@ async function printAllReports() {
       return;
     }
 
-    const reportPromises = submittedList.map(r =>
-      gasGet({ action: 'getReport', instructorName: r.instructorName, year, month })
-    );
-    const reportResults = await Promise.all(reportPromises);
+    const [reportResults, feeRes] = await Promise.all([
+      Promise.all(submittedList.map(r =>
+        gasGet({ action: 'getReport', instructorName: r.instructorName, year, month })
+      )),
+      gasPost({ action: 'calcAllFees', year, month }),
+    ]);
+
+    const feeMap = {};
+    if (feeRes.success) {
+      (feeRes.data || []).forEach(f => { feeMap[f['指導者氏名']] = f; });
+    }
 
     const reportHTMLs = reportResults
       .filter(res => res.success && res.data && res.data.length > 0)
@@ -749,7 +756,8 @@ async function printAllReports() {
         const rows  = res.data;
         const first = rows[0];
         const inst  = AdminState.instructors.find(i => (i['氏名'] || i.name) === first.instructorName) || {};
-        return buildReportPrintHTML(inst, rows, year, month);
+        const feeData = feeMap[first.instructorName] || null;
+        return buildReportPrintHTML(inst, rows, year, month, feeData);
       });
 
     if (reportHTMLs.length === 0) {
@@ -772,18 +780,23 @@ async function printAllReports() {
   }
 }
 
-function buildReportPrintHTML(inst, rows, year, month) {
+function buildReportPrintHTML(inst, rows, year, month, feeData) {
   const first     = rows[0] || {};
   const instrName = inst['氏名']      || inst.name     || first.instructorName || '';
   const clubName  = inst['クラブ名']  || inst.clubName || first.clubName       || '';
-  const rateType  = inst['区分']      || inst.rateType  || '';
-  const instrType = inst['指導者種別'] || inst.type      || '';
   const status      = first.status      || '';
   const submittedAt = first.submittedAt ? fmtDate(first.submittedAt) : '—';
-
-  const totalCalcH  = rows.reduce((s, r) => s + (Number(r.calcHours) || 0), 0);
-  const totalTravel = rows.reduce((s, r) => s + (Number(r.travelAmount) || 0), 0);
   const statusClass = status === '提出済' ? 'badge-success' : 'badge-warning';
+
+  const feeSection = feeData ? `
+    <div class="fee-section-title">謝金計算結果</div>
+    <div class="fee-result">
+      <div class="fee-row"><span>謝金総額</span><span class="fw-bold">¥${Number(feeData['謝金総額'] || 0).toLocaleString()}</span></div>
+      <div class="fee-row deduction"><span>源泉徴収額</span><span>−¥${Number(feeData['源泉徴収額'] || 0).toLocaleString()}</span></div>
+      <div class="fee-row net"><span>差引支払額</span><span>¥${Number(feeData['差引支払額'] || 0).toLocaleString()}</span></div>
+      <div class="fee-row"><span>旅費合計</span><span>¥${Number(feeData['旅費総額'] || 0).toLocaleString()}</span></div>
+    </div>
+  ` : '';
 
   return `
     <div class="report-issuer">一般社団法人たかすスポーツクラブ</div>
@@ -801,10 +814,6 @@ function buildReportPrintHTML(inst, rows, year, month) {
       <div class="detail-meta-item">
         <span class="detail-meta-label">対象年月</span>
         <span class="detail-meta-value">${year}年${month}月</span>
-      </div>
-      <div class="detail-meta-item">
-        <span class="detail-meta-label">区分</span>
-        <span class="detail-meta-value">${esc(rateType)} / ${esc(instrType)}</span>
       </div>
       <div class="detail-meta-item">
         <span class="detail-meta-label">ステータス</span>
@@ -826,28 +835,10 @@ function buildReportPrintHTML(inst, rows, year, month) {
           </tr>
         </thead>
         <tbody>${rows.map(buildDetailRowHTML).join('')}</tbody>
-        <tfoot>
-          <tr>
-            <td colspan="6" class="text-right">計算時間合計</td>
-            <td class="text-right fw-bold">${totalCalcH}h</td>
-            <td colspan="2" class="text-right">旅費合計</td>
-            <td class="text-right fw-bold">¥${totalTravel.toLocaleString()}</td>
-            <td></td>
-          </tr>
-        </tfoot>
       </table>
     </div>
 
-    <div class="report-sign">
-      <div class="sign-box">
-        <div class="sign-label">指導者署名・押印</div>
-        <div class="sign-area"></div>
-      </div>
-      <div class="sign-box">
-        <div class="sign-label">確認者署名・押印</div>
-        <div class="sign-area"></div>
-      </div>
-    </div>
+    ${feeSection}
   `;
 }
 
@@ -896,12 +887,12 @@ function buildBulkReportPrintHTML(reportHTMLs, year, month) {
     /* メタ情報（個人表示の detail-meta と同一） */
     .detail-meta {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 10px;
-      margin-bottom: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
       background: #f4f6f9;
       border-radius: 8px;
-      padding: 10px 14px;
+      padding: 12px 16px;
     }
     .detail-meta-item { display: flex; flex-direction: column; gap: 2px; }
     .detail-meta-label { font-size: 12px; color: #6c757d; }
@@ -919,54 +910,55 @@ function buildBulkReportPrintHTML(reportHTMLs, year, month) {
     .badge-success { background: #d4edda; color: #155724; }
     .badge-warning { background: #fff3cd; color: #856404; }
     /* テーブル（個人表示の data-table と同一） */
-    .table-wrapper { overflow-x: auto; margin-bottom: 12px; }
+    .table-wrapper { overflow-x: auto; margin-bottom: 16px; }
     .data-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 11px;
+      font-size: 13px;
     }
     .data-table th {
       background: #e8f0fb;
       color: #1a56a0;
       font-weight: 700;
-      padding: 6px 8px;
+      padding: 10px 12px;
       text-align: left;
       white-space: nowrap;
       border-bottom: 2px solid #1a56a0;
     }
     .data-table td {
-      padding: 6px 8px;
+      padding: 10px 12px;
       border-bottom: 1px solid #f0f0f0;
       vertical-align: middle;
     }
-    .data-table tfoot td {
-      background: #f4f6f9;
-      font-weight: 600;
+    /* 謝金計算結果（個人表示の fee-row と同一） */
+    .fee-section-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a56a0;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #e8f0fb;
+    }
+    .fee-result { margin-bottom: 12px; }
+    .fee-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 13px;
+    }
+    .fee-row:last-child { border-bottom: none; }
+    .fee-row.deduction { color: #dc3545; }
+    .fee-row.net {
+      font-size: 18px;
+      font-weight: 700;
+      color: #dc3545;
       border-top: 2px solid #dee2e6;
-      border-bottom: none;
+      margin-top: 4px;
+      padding-top: 8px;
     }
     .text-right { text-align: right; }
     .fw-bold { font-weight: 700; }
-    /* 署名欄 */
-    .report-sign {
-      display: flex;
-      gap: 20px;
-      margin-top: 16px;
-    }
-    .sign-box {
-      flex: 1;
-      border: 1px solid #dee2e6;
-      border-radius: 4px;
-      overflow: hidden;
-    }
-    .sign-label {
-      background: #f4f6f9;
-      padding: 4px 8px;
-      font-size: 11px;
-      color: #6c757d;
-      border-bottom: 1px solid #dee2e6;
-    }
-    .sign-area { height: 36mm; }
     @page { size: A4 portrait; margin: 0; }
     @media screen {
       body { background: #e0e0e0; }
@@ -998,7 +990,7 @@ function buildBulkPrintHTML(slipHTMLs, year, month) {
       font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
       font-size: 13px;
       line-height: 1.7;
-      color: #1a1a2e;
+      color: #2c3e50;
       background: #fff;
     }
     .slip-page {
@@ -1016,7 +1008,7 @@ function buildBulkPrintHTML(slipHTMLs, year, month) {
       font-size: 14px;
       font-weight: 600;
       margin-bottom: 6px;
-      color: #555;
+      color: #6c757d;
     }
     h2 {
       font-size: 20px;
@@ -1024,7 +1016,7 @@ function buildBulkPrintHTML(slipHTMLs, year, month) {
       text-align: center;
       margin-bottom: 24px;
       padding-bottom: 8px;
-      border-bottom: 2px solid #1a1a2e;
+      border-bottom: 2px solid #2c3e50;
     }
     dl.slip-meta {
       display: grid;
@@ -1033,7 +1025,7 @@ function buildBulkPrintHTML(slipHTMLs, year, month) {
       margin-bottom: 20px;
       font-size: 13px;
     }
-    dl.slip-meta dt { color: #555; }
+    dl.slip-meta dt { color: #6c757d; }
     dl.slip-meta dd { font-weight: 600; }
     .slip-detail-table {
       width: 100%;
