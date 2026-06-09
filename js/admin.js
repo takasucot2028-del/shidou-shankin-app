@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadDashboard();
 
   document.getElementById('db-load-btn').addEventListener('click', loadDashboard);
+  document.getElementById('db-bulk-report-print-btn').addEventListener('click', printAllReports);
   document.getElementById('detail-load-btn').addEventListener('click', loadDetail);
   document.getElementById('fee-load-btn').addEventListener('click', loadFeeResults);
   document.getElementById('fee-force-calc-btn').addEventListener('click', forceCalcFeeResults);
@@ -706,6 +707,233 @@ async function printAllSlips() {
   } finally {
     hideLoading();
   }
+}
+
+// ========== 全指導者月報一括印刷 ==========
+
+async function printAllReports() {
+  const year  = parseInt(document.getElementById('db-year').value);
+  const month = parseInt(document.getElementById('db-month').value);
+
+  showLoading();
+  try {
+    const dashRes = await gasGet({ action: 'getDashboard', year, month });
+    if (!dashRes.success) throw new Error(dashRes.error);
+
+    const submittedList = (dashRes.statusList || []).filter(r => r.status === '提出済');
+    if (submittedList.length === 0) {
+      showToast('提出済みの月報がありません', 'error');
+      return;
+    }
+
+    const reportPromises = submittedList.map(r =>
+      gasGet({ action: 'getReport', instructorName: r.instructorName, year, month })
+    );
+    const reportResults = await Promise.all(reportPromises);
+
+    const reportHTMLs = reportResults
+      .filter(res => res.success && res.data && res.data.length > 0)
+      .map(res => {
+        const rows  = res.data;
+        const first = rows[0];
+        const inst  = AdminState.instructors.find(i => (i['氏名'] || i.name) === first.instructorName) || {};
+        return buildReportPrintHTML(inst, rows, year, month);
+      });
+
+    if (reportHTMLs.length === 0) {
+      showToast('印刷できる月報がありません', 'error');
+      return;
+    }
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      showToast('ポップアップがブロックされました。ブラウザの設定でポップアップを許可してください', 'error');
+      return;
+    }
+    printWin.document.open();
+    printWin.document.write(buildBulkReportPrintHTML(reportHTMLs, year, month));
+    printWin.document.close();
+  } catch (e) {
+    showToast('一括印刷に失敗しました: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+function buildReportPrintHTML(inst, rows, year, month) {
+  const instrName = inst['氏名']      || inst.name     || (rows[0] && rows[0].instructorName) || '';
+  const clubName  = inst['クラブ名']  || inst.clubName || (rows[0] && rows[0].clubName)       || '';
+  const rateType  = inst['区分']      || inst.rateType  || '';
+  const instrType = inst['指導者種別'] || inst.type      || '';
+
+  const totalCalcH  = rows.reduce((s, r) => s + (Number(r.calcHours) || 0), 0);
+  const totalTravel = rows.reduce((s, r) => s + (Number(r.travelAmount) || 0), 0);
+
+  const detailRows = rows.map(r => `
+    <tr>
+      <td>${esc(r.date || '')}</td>
+      <td>${esc(r.category || '')}</td>
+      <td>${esc(r.rateType || '')}</td>
+      <td>${esc(r.startTime || '')}</td>
+      <td>${esc(r.endTime || '')}</td>
+      <td class="num">${r.instructionHours != null ? r.instructionHours + 'h' : '—'}</td>
+      <td class="num">${r.calcHours != null ? r.calcHours + 'h' : '—'}</td>
+      <td>${esc(r.transport || '')}</td>
+      <td>${esc(r.destination || '')}</td>
+      <td class="num">${r.travelAmount ? '¥' + Number(r.travelAmount).toLocaleString() : '—'}</td>
+      <td>${esc(r.note || '')}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="report-issuer">一般社団法人たかすスポーツクラブ</div>
+    <h2 class="report-title">部活動地域展開 指導月報</h2>
+    <dl class="report-meta">
+      <dt>対象年月</dt>    <dd>${year}年${month}月分</dd>
+      <dt>指導者氏名</dt>  <dd>${esc(instrName)}</dd>
+      <dt>クラブ名</dt>    <dd>${esc(clubName)}</dd>
+      <dt>区分</dt>        <dd>${esc(rateType)}</dd>
+      <dt>指導者種別</dt>  <dd>${esc(instrType)}</dd>
+    </dl>
+
+    <table class="report-table">
+      <thead>
+        <tr>
+          <th>日付</th><th>区分</th><th>時給区分</th>
+          <th>開始</th><th>終了</th><th>指導時間</th><th>計算時間</th>
+          <th>交通手段</th><th>行先</th><th>旅費</th><th>備考</th>
+        </tr>
+      </thead>
+      <tbody>${detailRows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="6" class="summary-label">計算時間合計</td>
+          <td class="num summary-val">${totalCalcH}h</td>
+          <td colspan="2" class="summary-label">旅費合計</td>
+          <td class="num summary-val">¥${totalTravel.toLocaleString()}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="report-sign">
+      <div class="sign-box">
+        <div class="sign-label">指導者署名・押印</div>
+        <div class="sign-area"></div>
+      </div>
+      <div class="sign-box">
+        <div class="sign-label">確認者署名・押印</div>
+        <div class="sign-area"></div>
+      </div>
+    </div>
+  `;
+}
+
+function buildBulkReportPrintHTML(reportHTMLs, year, month) {
+  const pages = reportHTMLs.map(html => `<div class="report-page">${html}</div>`).join('');
+  return `<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>${year}年${month}月分 指導月報一括印刷（${reportHTMLs.length}名）</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif;
+      font-size: 12px;
+      line-height: 1.6;
+      color: #1a1a2e;
+      background: #fff;
+    }
+    .report-page {
+      padding: 12mm 14mm;
+      width: 210mm;
+      min-height: 297mm;
+      page-break-after: always;
+      break-after: page;
+    }
+    .report-page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+    .report-issuer {
+      text-align: center;
+      font-size: 11px;
+      color: #555;
+      margin-bottom: 4px;
+    }
+    .report-title {
+      font-size: 18px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #1a1a2e;
+    }
+    dl.report-meta {
+      display: grid;
+      grid-template-columns: 90px 1fr 90px 1fr;
+      gap: 3px 12px;
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    dl.report-meta dt { color: #555; }
+    dl.report-meta dd { font-weight: 600; }
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      font-size: 10px;
+    }
+    .report-table th {
+      background: #f0f0f0;
+      border: 1px solid #bbb;
+      padding: 4px 5px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .report-table td {
+      border: 1px solid #bbb;
+      padding: 4px 5px;
+    }
+    .report-table td.num { text-align: right; }
+    .report-table tfoot td { background: #fafafa; font-weight: 600; }
+    .report-table tfoot .summary-label { text-align: right; color: #555; }
+    .report-table tfoot .summary-val { font-size: 11px; }
+    .report-sign {
+      display: flex;
+      gap: 20px;
+      margin-top: 16px;
+    }
+    .sign-box {
+      flex: 1;
+      border: 1px solid #aaa;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .sign-label {
+      background: #f0f0f0;
+      padding: 4px 8px;
+      font-size: 11px;
+      border-bottom: 1px solid #aaa;
+    }
+    .sign-area { height: 36mm; }
+    @page { size: A4 portrait; margin: 0; }
+    @media screen {
+      body { background: #e0e0e0; }
+      .report-page {
+        background: #fff;
+        margin: 20px auto;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      }
+    }
+  </style>
+</head>
+<body>
+  ${pages}
+  <script>window.print();<\/script>
+</body>
+</html>`;
 }
 
 function buildBulkPrintHTML(slipHTMLs, year, month) {
