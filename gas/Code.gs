@@ -88,6 +88,9 @@ function doPost(e) {
       case 'generateClubSummarySheet':
         result = generateClubSummarySheet(body);
         break;
+      case 'generateCategorySummarySheet':
+        result = generateCategorySummarySheet(body);
+        break;
       case 'sendPaySlipEmails':
         result = sendPaySlipEmails(body);
         break;

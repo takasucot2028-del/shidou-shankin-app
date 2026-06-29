@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('fee-export-btn').addEventListener('click', exportFeeSheet);
   document.getElementById('fee-transfer-btn').addEventListener('click', generateTransferSheet);
   document.getElementById('fee-club-summary-btn').addEventListener('click', generateClubSummarySheet);
+  document.getElementById('fee-category-summary-btn').addEventListener('click', generateCategorySummarySheet);
   document.getElementById('slip-preview-btn').addEventListener('click', previewSlip);
   document.getElementById('slip-print-btn').addEventListener('click', () => window.print());
   document.getElementById('slip-bulk-print-btn').addEventListener('click', printAllSlips);
@@ -467,6 +468,24 @@ async function generateClubSummarySheet() {
     const res = await gasPost({ action: 'generateClubSummarySheet', year, month });
     if (res.success) {
       showToast(`クラブ別集計シートを出力しました（${res.count}件）`, 'success');
+    } else {
+      showToast(res.error || '出力に失敗しました', 'error');
+    }
+  } catch (e) {
+    showToast('通信エラー: ' + e.message, 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function generateCategorySummarySheet() {
+  const year  = document.getElementById('fee-year').value;
+  const month = document.getElementById('fee-month').value;
+  showLoading();
+  try {
+    const res = await gasPost({ action: 'generateCategorySummarySheet', year, month });
+    if (res.success) {
+      showToast(`区分別集計シートを出力しました（${res.count}件）`, 'success');
     } else {
       showToast(res.error || '出力に失敗しました', 'error');
     }

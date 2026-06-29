@@ -978,6 +978,217 @@ function generateClubSummarySheet(body) {
   return { success: true, count: dataCount, sheetName: sheetName };
 }
 
+// ========== 区分別謝金集計シート生成 ==========
+
+/**
+ * 指定年月の区分別謝金集計シートを生成する。
+ * 各指導者×各区分（平日/休日/長期休暇/大会引率）の謝金額・源泉徴収額・差引支給額を出力する。
+ *
+ * 計算方法:
+ *   月報データから「区分×時給区分（メイン/サブ）」で謝金計算時間を再集計し、
+ *   区分ごとに 謝金額 = round(メイン時間×1600 + サブ時間×1100)、
+ *   源泉徴収額 = floor(謝金額 × 10.21%)、差引支給額 = 謝金額 − 源泉徴収額 を求める。
+ *   合計列は各区分の単純合算（源泉は区分ごと切捨ての合計）のため、
+ *   月総額に対する一括計算（謝金計算結果シートの値）と数円差が出る場合がある。
+ *   手動修正された指導者は備考に注記する。
+ *
+ * body: { year, month }
+ */
+function generateCategorySummarySheet(body) {
+  const year = parseInt(body.year);
+  const month = parseInt(body.month);
+  const ymLabel = year + '年' + month + '月';
+  const sheetName = '区分別集計_' + ymLabel;
+
+  const CATEGORIES = ['平日', '休日', '長期休暇', '大会引率'];
+  const CATEGORY_LABELS = {
+    '平日': '平日練習', '休日': '休日練習', '長期休暇': '長期休暇', '大会引率': '大会引率',
+  };
+
+  // 月報データを取得し、対象年月・提出済みの行を抽出
+  const reportSheet = getOrCreateReportSheet(year);
+  const reportData = reportSheet.getDataRange().getValues().slice(1);
+  const rows = reportData.filter(row =>
+    parseInt(row[COL.YEAR]) === year &&
+    parseInt(row[COL.MONTH]) === month &&
+    row[COL.STATUS] === '提出済'
+  );
+
+  if (rows.length === 0) {
+    return { success: false, error: '対象年月の提出済み月報がありません: ' + ymLabel };
+  }
+
+  // 指導者マスタをマップ化（氏名 → {clubName, type}）
+  const masterSheet = getSheet('指導者マスタ');
+  const masterRows = masterSheet.getDataRange().getValues().slice(1);
+  const instructorMap = {};
+  masterRows.forEach(row => {
+    if (row[1]) {
+      const n = String(row[1]).trim();
+      instructorMap[n] = { clubName: String(row[2]).trim(), type: String(row[4]).trim() };
+    }
+  });
+
+  // 手動修正フラグのある指導者を収集（区分別は再計算のため総額と差が出る旨を備考表示）
+  const feeSheet = getOrCreateFeeSheet();
+  const feeData = feeSheet.getDataRange().getValues();
+  const modifiedNames = {};
+  for (let i = 1; i < feeData.length; i++) {
+    if (matchYearMonth(feeData[i][2], year, month) && feeData[i][14] === true) {
+      modifiedNames[String(feeData[i][1]).trim()] = true;
+    }
+  }
+
+  // 指導者ごとに区分×時給区分の謝金計算時間を集計
+  const perInstructor = {}; // name → { category → { main, sub } }
+  rows.forEach(row => {
+    const name = String(row[COL.INSTRUCTOR_NAME]).trim();
+    const inst = instructorMap[name];
+    if (!inst) return; // マスタ未登録はスキップ
+    const category = row[COL.CATEGORY];
+    if (CATEGORIES.indexOf(category) === -1) return;
+
+    const calcHours = calcInstructionHours(
+      row[COL.START_TIME], row[COL.END_TIME], category, inst.type
+    );
+
+    if (!perInstructor[name]) {
+      perInstructor[name] = {};
+      CATEGORIES.forEach(c => { perInstructor[name][c] = { main: 0, sub: 0 }; });
+    }
+    if (row[COL.RATE_TYPE] === 'メイン') {
+      perInstructor[name][category].main += calcHours;
+    } else {
+      perInstructor[name][category].sub += calcHours;
+    }
+  });
+
+  // 各指導者の区分別金額を算出
+  const dataRows = Object.keys(perInstructor).map(name => {
+    const inst = instructorMap[name] || {};
+    const cats = {};
+    let totFee = 0, totWith = 0, totNet = 0;
+    CATEGORIES.forEach(c => {
+      const h = perInstructor[name][c];
+      const fee = Math.round(h.main * HOURLY_RATE['メイン'] + h.sub * HOURLY_RATE['サブ']);
+      const withholding = Math.floor(fee * WITHHOLDING_TAX_RATE);
+      const netPay = fee - withholding;
+      cats[c] = { fee: fee, withholding: withholding, netPay: netPay };
+      totFee += fee; totWith += withholding; totNet += netPay;
+    });
+    return {
+      name: name,
+      clubName: inst.clubName || '',
+      cats: cats,
+      totFee: totFee, totWith: totWith, totNet: totNet,
+      modified: !!modifiedNames[name],
+    };
+  });
+
+  if (dataRows.length === 0) {
+    return { success: false, error: '対象年月の集計対象がありません（指導者マスタ未登録の可能性）: ' + ymLabel };
+  }
+
+  // クラブ名昇順 → 氏名昇順でソート
+  dataRows.sort((a, b) => {
+    if (a.clubName < b.clubName) return -1;
+    if (a.clubName > b.clubName) return 1;
+    if (a.name < b.name) return -1;
+    if (a.name > b.name) return 1;
+    return 0;
+  });
+
+  // ===== シート構築 =====
+  const TOTAL_COLS = 18; // クラブ名 + 氏名 + (4区分+合計)×3 + 備考
+  const groupLabels = [
+    CATEGORY_LABELS['平日'], CATEGORY_LABELS['休日'],
+    CATEGORY_LABELS['長期休暇'], CATEGORY_LABELS['大会引率'], '合計',
+  ];
+  const subLabels = ['謝金額', '源泉徴収額', '差引支給額'];
+
+  const ss = getSpreadsheet();
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+  } else {
+    sheet.getRange(1, 1, sheet.getMaxRows(), sheet.getMaxColumns()).breakApart();
+    sheet.clearContents();
+    sheet.clearFormats();
+  }
+
+  // 1行目: タイトル
+  sheet.getRange(1, 1).setValue(ymLabel + ' 区分別謝金集計');
+  sheet.getRange(1, 1, 1, TOTAL_COLS).merge();
+  sheet.getRange(1, 1).setFontSize(14).setFontWeight('bold');
+
+  // 3行目: グループヘッダー / 4行目: サブヘッダー
+  const headerGroup = ['クラブ名', '指導者氏名'];
+  groupLabels.forEach(g => { headerGroup.push(g, '', ''); });
+  headerGroup.push('備考');
+  const headerSub = ['', ''];
+  groupLabels.forEach(() => { headerSub.push(subLabels[0], subLabels[1], subLabels[2]); });
+  headerSub.push('');
+  sheet.getRange(3, 1, 1, TOTAL_COLS).setValues([headerGroup]);
+  sheet.getRange(4, 1, 1, TOTAL_COLS).setValues([headerSub]);
+
+  // 結合: クラブ名・氏名・備考は縦結合、各区分グループは横結合
+  sheet.getRange(3, 1, 2, 1).merge();
+  sheet.getRange(3, 2, 2, 1).merge();
+  sheet.getRange(3, TOTAL_COLS, 2, 1).merge();
+  for (let g = 0; g < groupLabels.length; g++) {
+    sheet.getRange(3, 3 + g * 3, 1, 3).merge();
+  }
+
+  sheet.getRange(3, 1, 2, TOTAL_COLS)
+    .setBackground('#4a4a4a')
+    .setFontColor('#ffffff')
+    .setFontWeight('bold')
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle');
+  sheet.setFrozenRows(4);
+
+  // データ行
+  const outRows = dataRows.map(d => {
+    const r = [d.clubName, d.name];
+    CATEGORIES.forEach(c => {
+      r.push(d.cats[c].fee, d.cats[c].withholding, d.cats[c].netPay);
+    });
+    r.push(d.totFee, d.totWith, d.totNet);
+    r.push(d.modified ? '※手動修正あり（総額と差異の可能性）' : '');
+    return r;
+  });
+
+  // 全体合計行（数値列 3〜17 を合算）
+  const grand = [];
+  for (let i = 0; i < 15; i++) grand.push(0);
+  outRows.forEach(r => {
+    for (let i = 0; i < 15; i++) grand[i] += Number(r[2 + i]) || 0;
+  });
+  const totalRow = ['【合計】', ''].concat(grand).concat(['']);
+
+  sheet.getRange(5, 1, outRows.length, TOTAL_COLS).setValues(outRows);
+  const totalRowIndex = 5 + outRows.length;
+  sheet.getRange(totalRowIndex, 1, 1, TOTAL_COLS).setValues([totalRow]);
+  sheet.getRange(totalRowIndex, 1, 1, 2).merge();
+
+  // 数値列（3〜17）を通貨書式
+  sheet.getRange(5, 3, outRows.length + 1, 15).setNumberFormat('#,##0');
+
+  // 合計行の書式
+  sheet.getRange(totalRowIndex, 1, 1, TOTAL_COLS)
+    .setBackground('#2c5282').setFontColor('#ffffff').setFontWeight('bold');
+
+  // ゼブラ縞（データ行）
+  outRows.forEach((row, i) => {
+    if (i % 2 === 1) sheet.getRange(5 + i, 1, 1, TOTAL_COLS).setBackground('#f8f9fa');
+  });
+
+  sheet.autoResizeColumns(1, TOTAL_COLS);
+
+  Logger.log('[generateCategorySummarySheet] 完了: シート名="%s", 指導者数=%s', sheetName, dataRows.length);
+  return { success: true, count: dataRows.length, sheetName: sheetName };
+}
+
 // ========== デバッグ用テスト関数 ==========
 
 /**
