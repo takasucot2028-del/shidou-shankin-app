@@ -410,10 +410,10 @@ function addRow() {
         <span class="weekday-label"></span>
       </div>
     </td>
-    <td data-label="区分">
-      <select class="sel-category" aria-label="区分">
-        <option value="平日">平日</option>
-        <option value="休日">休日</option>
+    <td data-label="内容">
+      <select class="sel-category" aria-label="内容">
+        <option value="平日">平日練習</option>
+        <option value="休日">休日練習</option>
         <option value="長期休暇">長期休暇</option>
         <option value="大会引率">大会引率</option>
       </select>
@@ -961,8 +961,8 @@ function renderPaySlip(data, year, month) {
 
   // 区分別指導時間行
   const cats = [
-    { label: '平日',     hours: fee.weekdayHours    || 0 },
-    { label: '休日',     hours: fee.holidayHours    || 0 },
+    { label: '平日練習', hours: fee.weekdayHours    || 0 },
+    { label: '休日練習', hours: fee.holidayHours    || 0 },
     { label: '長期休暇', hours: fee.longVacHours    || 0 },
     { label: '大会引率', hours: fee.tournamentHours || 0 },
   ].filter(c => c.hours > 0);
@@ -1145,7 +1145,7 @@ function onPrintReport() {
 
     return `<tr>
       <td style="${dateColor}white-space:nowrap;">${esc(dateDisp)} ${wday}</td>
-      <td>${esc(r.category || '')}</td>
+      <td>${esc(Config.CATEGORY_LABEL[r.category] || r.category || '')}</td>
       <td>${esc(r.rateType || '')}</td>
       <td>${r.startTime || ''}</td>
       <td>${r.endTime || ''}</td>
@@ -1166,7 +1166,7 @@ function onPrintReport() {
   });
   const catRows = ['平日', '休日', '長期休暇', '大会引率']
     .filter(c => catMap[c])
-    .map(c => `<tr><td>${c}</td><td>${catMap[c].count}回</td><td>${formatHours(catMap[c].hours)}</td></tr>`)
+    .map(c => `<tr><td>${Config.CATEGORY_LABEL[c] || c}</td><td>${catMap[c].count}回</td><td>${formatHours(catMap[c].hours)}</td></tr>`)
     .join('');
 
   const mainFeeAmt = Math.round(preview.mainHours * Config.HOURLY_RATE.MAIN);
@@ -1212,7 +1212,7 @@ function onPrintReport() {
   <table>
     <thead>
       <tr>
-        <th>日付</th><th>区分</th><th>時給区分</th><th>開始</th><th>終了</th>
+        <th>日付</th><th>内容</th><th>時給区分</th><th>開始</th><th>終了</th>
         <th>指導時間</th><th>交通手段</th><th>行先</th><th>旅費</th><th>備考</th>
       </tr>
     </thead>
@@ -1221,9 +1221,9 @@ function onPrintReport() {
 
   <div class="summary-grid">
     <div>
-      <div class="section-title">区分別集計</div>
+      <div class="section-title">内容別集計</div>
       <table>
-        <thead><tr><th>区分</th><th>回数</th><th>指導時間</th></tr></thead>
+        <thead><tr><th>内容</th><th>回数</th><th>指導時間</th></tr></thead>
         <tbody>${catRows}</tbody>
       </table>
     </div>

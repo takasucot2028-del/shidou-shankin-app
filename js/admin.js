@@ -186,7 +186,7 @@ function jumpToDetail(name) {
 function buildDetailRowHTML(r) {
   return `<tr>
     <td>${esc(r.date || '')}</td>
-    <td>${esc(r.category || '')}</td>
+    <td>${esc(Config.CATEGORY_LABEL[r.category] || r.category || '')}</td>
     <td>${esc(r.rateType || '')}</td>
     <td>${esc(r.startTime || '')}</td>
     <td>${esc(r.endTime || '')}</td>
@@ -829,7 +829,7 @@ function buildReportPrintHTML(inst, rows, year, month, feeData) {
       <table class="data-table">
         <thead>
           <tr>
-            <th>日付</th><th>区分</th><th>時給区分</th>
+            <th>日付</th><th>内容</th><th>時給区分</th>
             <th>開始</th><th>終了</th><th>指導時間</th><th>計算時間</th>
             <th>交通手段</th><th>行先</th><th>旅費</th><th>備考</th>
           </tr>
@@ -1355,9 +1355,9 @@ function addEditRow(data = null) {
   tr.innerHTML = `
     <td><input type="date" class="edit-inp-date" aria-label="日付"></td>
     <td>
-      <select class="edit-sel-category" aria-label="区分">
-        <option value="平日">平日</option>
-        <option value="休日">休日</option>
+      <select class="edit-sel-category" aria-label="内容">
+        <option value="平日">平日練習</option>
+        <option value="休日">休日練習</option>
         <option value="長期休暇">長期休暇</option>
         <option value="大会引率">大会引率</option>
       </select>
