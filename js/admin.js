@@ -831,7 +831,7 @@ function buildReportPrintHTML(inst, rows, year, month, feeData) {
           <tr>
             <th>日付</th><th>内容</th><th>時給区分</th>
             <th>開始</th><th>終了</th><th>指導時間</th><th>計算時間</th>
-            <th>交通手段</th><th>行先</th><th>旅費</th><th>備考</th>
+            <th>交通手段</th><th>場所</th><th>旅費</th><th>備考</th>
           </tr>
         </thead>
         <tbody>${rows.map(buildDetailRowHTML).join('')}</tbody>
@@ -1378,7 +1378,7 @@ function addEditRow(data = null) {
         <option value="JR代">JR代</option>
       </select>
     </td>
-    <td><input type="text" class="edit-inp-dest" placeholder="行先" aria-label="行先"></td>
+    <td><input type="text" class="edit-inp-dest" placeholder="場所" aria-label="場所"></td>
     <td><input type="number" class="edit-inp-travel" min="0" step="1" placeholder="0" aria-label="旅費金額"></td>
     <td><input type="text" class="edit-inp-note" placeholder="任意" aria-label="備考"></td>
     <td><button type="button" class="btn-icon edit-delete-row-btn" title="削除" aria-label="削除">✕</button></td>

@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node --check C:/Users/JHUSER17/Desktop/shidou-shankin-app/js/config.js)"
+      "Bash(node --check C:/Users/JHUSER17/Desktop/shidou-shankin-app/js/config.js)",
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

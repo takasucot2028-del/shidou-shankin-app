@@ -440,8 +440,8 @@ function addRow() {
         <option value="JR代">JR代</option>
       </select>
     </td>
-    <td data-label="行先">
-      <input type="text" class="inp-dest" placeholder="行先" aria-label="行先">
+    <td data-label="場所">
+      <input type="text" class="inp-dest" placeholder="場所" aria-label="場所">
     </td>
     <td data-label="旅費(円)">
       <input type="number" class="inp-travel" min="0" step="1" placeholder="0" aria-label="旅費金額">
@@ -1213,7 +1213,7 @@ function onPrintReport() {
     <thead>
       <tr>
         <th>日付</th><th>内容</th><th>時給区分</th><th>開始</th><th>終了</th>
-        <th>指導時間</th><th>交通手段</th><th>行先</th><th>旅費</th><th>備考</th>
+        <th>指導時間</th><th>交通手段</th><th>場所</th><th>旅費</th><th>備考</th>
       </tr>
     </thead>
     <tbody>${tableRows}</tbody>
