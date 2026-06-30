@@ -84,6 +84,23 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('payslip-show-btn').addEventListener('click', onShowPaySlip);
   document.getElementById('payslip-pdf-btn').addEventListener('click', printPaySlip);
 
+  // アプリ内ブラウザ（LINE等）ではPDF保存不可の案内を表示
+  if (isInAppBrowser()) {
+    const warn = document.getElementById('inapp-warning');
+    if (warn) warn.classList.remove('hidden');
+  }
+  const copyUrlBtn = document.getElementById('copy-url-btn');
+  if (copyUrlBtn) {
+    copyUrlBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(location.href);
+        showToast('URLをコピーしました。Chromeに貼り付けて開いてください', 'success');
+      } catch {
+        showToast('コピーできませんでした。アドレスバーのURLを手動でコピーしてください', 'error');
+      }
+    });
+  }
+
   // 既存セッションがあればそのままフォームへ
   const auth = getAuth();
   if (auth && auth.name) {
@@ -1171,6 +1188,12 @@ async function printPaySlip() {
   }
 }
 
+// LINE・各種SNSのアプリ内ブラウザ（WebView）かどうかを判定する
+function isInAppBrowser() {
+  const ua = navigator.userAgent || '';
+  return /Line\/|FBAN|FBAV|Instagram|Twitter|MicroMessenger|TikTok/i.test(ua);
+}
+
 // 生成したPDFを端末に応じて出力する
 // スマホは Web Share（共有→「ファイルに保存」等）を優先。非対応環境はダウンロード/別タブ表示にフォールバック。
 async function outputPdf(pdf, fname) {
@@ -1188,9 +1211,20 @@ async function outputPdf(pdf, fname) {
     // それ以外は次の手段へフォールバック
   }
 
+  // 2) アプリ内ブラウザ（LINE等）はダウンロード非対応。外部ブラウザで開くよう案内する。
+  if (isInAppBrowser()) {
+    alert(
+      'LINEなどのアプリ内ブラウザではPDFを保存できません。\n\n' +
+      '画面右上のメニュー（「︙」や「↗」アイコン）から\n' +
+      '「ブラウザで開く」「Chromeで開く」「他のアプリで開く」を選び、\n' +
+      'Chrome などのブラウザで開き直してから、もう一度お試しください。'
+    );
+    return;
+  }
+
   const url = URL.createObjectURL(blob);
 
-  // 2) ダウンロード（PC・通常のモバイルブラウザ）
+  // 3) ダウンロード（PC・通常のモバイルブラウザ）
   try {
     const a = document.createElement('a');
     a.href = url;
@@ -1200,7 +1234,7 @@ async function outputPdf(pdf, fname) {
     a.click();
     a.remove();
   } catch (err) {
-    // 3) ダウンロード不可環境では別タブで表示
+    // 4) ダウンロード不可環境では別タブで表示
     window.open(url, '_blank');
   }
 
