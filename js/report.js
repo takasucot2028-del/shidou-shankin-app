@@ -1194,15 +1194,27 @@ function isInAppBrowser() {
   return /Line\/|FBAN|FBAV|Instagram|Twitter|MicroMessenger|TikTok/i.test(ua);
 }
 
+// モバイル端末（スマホ・タブレット）かどうかを判定する
+function isMobileDevice() {
+  if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
+    return navigator.userAgentData.mobile;
+  }
+  const ua = navigator.userAgent || '';
+  // iPadOS は Mac を名乗るためタッチ対応で補完
+  if (/iPad|iPhone|iPod|Android|Mobile/i.test(ua)) return true;
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+}
+
 // 生成したPDFを端末に応じて出力する
 // スマホは Web Share（共有→「ファイルに保存」等）を優先。非対応環境はダウンロード/別タブ表示にフォールバック。
 async function outputPdf(pdf, fname) {
   const blob = pdf.output('blob');
 
   // 1) Web Share API（スマホで最も確実。アプリ内ブラウザのダウンロード非対応を回避）
+  //    PCは共有シートではなく通常のダウンロードを使うため、モバイル端末に限定する。
   try {
     const file = new File([blob], fname, { type: 'application/pdf' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    if (isMobileDevice() && navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: fname });
       return;
     }
