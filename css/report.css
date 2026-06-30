@@ -511,8 +511,23 @@
    PDF印刷 (@media print)
    =========================== */
 @media print {
+  /* 既定で body 直下をすべて隠す */
   body > * { display: none !important; }
-  body > main .payslip-doc { display: block !important; }
+
+  /* 給与明細(#payslip-doc)までの祖先経路を表示する。
+     祖先が display:none だと、その配下の position:fixed な #payslip-doc も
+     描画されず真っ白になるため、経路上の要素を明示的に表示する。 */
+  body > main,
+  body > main #payslip-section,
+  body > main #payslip-preview,
+  body > main #payslip-preview .payslip-doc {
+    display: block !important;
+  }
+
+  /* 経路上の余計な兄弟要素は隠す（余白・空白ページ防止） */
+  body > main > *:not(#payslip-section) { display: none !important; }
+  #payslip-section > *:not(#payslip-preview) { display: none !important; }
+  #payslip-preview > *:not(.payslip-doc) { display: none !important; }
 
   .payslip-doc {
     position: fixed;
@@ -523,13 +538,7 @@
     padding: 15mm 18mm;
     box-shadow: none;
     border-radius: 0;
-  }
-
-  /* 印刷時に強制表示 */
-  .payslip-doc,
-  .payslip-doc * {
-    visibility: visible !important;
-    display: revert !important;
+    background: #fff;
   }
 }
 
