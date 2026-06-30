@@ -1161,7 +1161,7 @@ async function printPaySlip() {
       pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
       heightLeft -= pageH;
     }
-    pdf.save(fname);
+    await outputPdf(pdf, fname);
   } catch (e) {
     console.error('[printPaySlip] PDF生成エラー:', e);
     showToast('PDF生成に失敗しました: ' + (e && e.message ? e.message : e), 'error');
@@ -1169,6 +1169,42 @@ async function printPaySlip() {
     if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
     hideLoading();
   }
+}
+
+// 生成したPDFを端末に応じて出力する
+// スマホは Web Share（共有→「ファイルに保存」等）を優先。非対応環境はダウンロード/別タブ表示にフォールバック。
+async function outputPdf(pdf, fname) {
+  const blob = pdf.output('blob');
+
+  // 1) Web Share API（スマホで最も確実。アプリ内ブラウザのダウンロード非対応を回避）
+  try {
+    const file = new File([blob], fname, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: fname });
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return; // ユーザーが共有をキャンセル
+    // それ以外は次の手段へフォールバック
+  }
+
+  const url = URL.createObjectURL(blob);
+
+  // 2) ダウンロード（PC・通常のモバイルブラウザ）
+  try {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (err) {
+    // 3) ダウンロード不可環境では別タブで表示
+    window.open(url, '_blank');
+  }
+
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 // ========== 曜日表示 ==========
