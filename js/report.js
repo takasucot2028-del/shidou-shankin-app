@@ -929,6 +929,8 @@ async function onShowPaySlip() {
 
 function renderPaySlip(data, year, month) {
   const { instructor, fee } = data;
+  // PDFダウンロード用にメタ情報を保持
+  State.lastPaySlip = { name: instructor.name || '', year: year, month: month };
   const today    = new Date();
   const payDate  = calcPaymentDate(year, month);
 
@@ -1076,8 +1078,68 @@ function fmtH(h) {
   return hh + '時間' + (mm > 0 ? mm + '分' : '');
 }
 
-function printPaySlip() {
-  window.print();
+async function printPaySlip() {
+  const el = document.getElementById('payslip-doc');
+  if (!el || !el.innerHTML.trim()) {
+    showToast('先に「表示」で給与明細を表示してください', 'error');
+    return;
+  }
+
+  // ライブラリ未読込（オフライン等）の場合は従来の印刷ダイアログにフォールバック
+  if (!window.jspdf || typeof window.html2canvas !== 'function') {
+    window.print();
+    return;
+  }
+
+  const meta  = State.lastPaySlip || {};
+  const fname = `給与明細_${meta.name || ''}_${meta.year || ''}年${meta.month || ''}月.pdf`;
+
+  // A4幅(約794px)固定のクローンを画面外に作り、端末によらず同じレイアウトで描画する
+  const clone = el.cloneNode(true);
+  clone.style.position  = 'fixed';
+  clone.style.left      = '-10000px';
+  clone.style.top       = '0';
+  clone.style.width     = '794px';
+  clone.style.maxWidth  = 'none';
+  clone.style.margin    = '0';
+  clone.style.boxShadow = 'none';
+  clone.style.background = '#ffffff';
+  document.body.appendChild(clone);
+
+  showLoading();
+  try {
+    const canvas = await html2canvas(clone, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      windowWidth: 794,
+    });
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const { jsPDF } = window.jspdf;
+    const pdf   = new jsPDF('p', 'mm', 'a4');
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const imgH  = canvas.height * pageW / canvas.width;
+
+    // 1ページに収まらない場合はページ送りして全体を出力
+    let heightLeft = imgH;
+    let position   = 0;
+    pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
+    heightLeft -= pageH;
+    while (heightLeft > 0) {
+      position -= pageH;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
+      heightLeft -= pageH;
+    }
+    pdf.save(fname);
+  } catch (e) {
+    showToast('PDF生成に失敗しました。印刷ダイアログを開きます: ' + e.message, 'error');
+    window.print();
+  } finally {
+    document.body.removeChild(clone);
+    hideLoading();
+  }
 }
 
 // ========== 曜日表示 ==========
