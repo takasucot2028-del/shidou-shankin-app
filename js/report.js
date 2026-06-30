@@ -1078,6 +1078,37 @@ function fmtH(h) {
   return hh + '時間' + (mm > 0 ? mm + '分' : '');
 }
 
+// 外部スクリプトを一度だけ動的に読み込む
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const existing = Array.from(document.scripts).find(s => s.src === src);
+    if (existing) {
+      if (existing.dataset.loaded === '1') return resolve();
+      existing.addEventListener('load', () => resolve());
+      existing.addEventListener('error', () => reject(new Error('読み込み失敗: ' + src)));
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload  = () => { s.dataset.loaded = '1'; resolve(); };
+    s.onerror = () => reject(new Error('読み込み失敗: ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+// PDF生成ライブラリ（html2canvas / jsPDF）を確実に用意する
+async function ensurePdfLibs() {
+  if (typeof window.html2canvas !== 'function') {
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  }
+  if (!window.jspdf) {
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  }
+  if (typeof window.html2canvas !== 'function' || !window.jspdf) {
+    throw new Error('PDFライブラリを読み込めませんでした（通信環境をご確認ください）');
+  }
+}
+
 async function printPaySlip() {
   const el = document.getElementById('payslip-doc');
   if (!el || !el.innerHTML.trim()) {
@@ -1085,33 +1116,31 @@ async function printPaySlip() {
     return;
   }
 
-  // ライブラリ未読込（オフライン等）の場合は従来の印刷ダイアログにフォールバック
-  if (!window.jspdf || typeof window.html2canvas !== 'function') {
-    window.print();
-    return;
-  }
-
   const meta  = State.lastPaySlip || {};
   const fname = `給与明細_${meta.name || ''}_${meta.year || ''}年${meta.month || ''}月.pdf`;
 
-  // A4幅(約794px)固定のクローンを画面外に作り、端末によらず同じレイアウトで描画する
-  const clone = el.cloneNode(true);
-  clone.style.position  = 'fixed';
-  clone.style.left      = '-10000px';
-  clone.style.top       = '0';
-  clone.style.width     = '794px';
-  clone.style.maxWidth  = 'none';
-  clone.style.margin    = '0';
-  clone.style.boxShadow = 'none';
-  clone.style.background = '#ffffff';
-  document.body.appendChild(clone);
-
+  let clone = null;
   showLoading();
   try {
+    // 必要なら CDN からライブラリを取得（index.html の読み込み失敗にも対応）
+    await ensurePdfLibs();
+
+    // A4幅(約794px)固定のクローンを画面外に作り、端末によらず同じレイアウトで描画する
+    clone = el.cloneNode(true);
+    clone.removeAttribute('id');
+    clone.style.position  = 'fixed';
+    clone.style.left      = '-10000px';
+    clone.style.top       = '0';
+    clone.style.width     = '794px';
+    clone.style.maxWidth  = 'none';
+    clone.style.margin    = '0';
+    clone.style.boxShadow = 'none';
+    clone.style.background = '#ffffff';
+    document.body.appendChild(clone);
+
     const canvas = await html2canvas(clone, {
       scale: 2,
       backgroundColor: '#ffffff',
-      useCORS: true,
       windowWidth: 794,
     });
     const imgData = canvas.toDataURL('image/jpeg', 0.95);
@@ -1134,10 +1163,10 @@ async function printPaySlip() {
     }
     pdf.save(fname);
   } catch (e) {
-    showToast('PDF生成に失敗しました。印刷ダイアログを開きます: ' + e.message, 'error');
-    window.print();
+    console.error('[printPaySlip] PDF生成エラー:', e);
+    showToast('PDF生成に失敗しました: ' + (e && e.message ? e.message : e), 'error');
   } finally {
-    document.body.removeChild(clone);
+    if (clone && clone.parentNode) clone.parentNode.removeChild(clone);
     hideLoading();
   }
 }
