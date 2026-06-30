@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shidou-report-v3';
+const CACHE_NAME = 'shidou-report-v4';
 
 const PRECACHE_FILES = [
   './',
@@ -49,17 +49,24 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // 静的ファイルはキャッシュ優先、なければネットワーク取得してキャッシュ
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-      return fetch(event.request).then(response => {
+  // 同一オリジンのファイル（HTML/CSS/JS等）はネットワーク優先。
+  // 常に最新を取得し、成功時はキャッシュ更新。オフライン時のみキャッシュへフォールバック。
+  // ※キャッシュ優先だと古いindex.html/JSを返し続け、更新が反映されないため。
+  if (event.request.method === 'GET' && url.origin === self.location.origin) {
+    event.respondWith(
+      fetch(event.request).then(response => {
         if (response && response.status === 200 && response.type === 'basic') {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
         return response;
-      });
-    })
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // それ以外（CDN等のクロスオリジン）はキャッシュ優先、なければネットワーク
+  event.respondWith(
+    caches.match(event.request).then(cached => cached || fetch(event.request))
   );
 });
