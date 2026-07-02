@@ -324,8 +324,9 @@ async function loadDraftReport() {
     if (!data.success) throw new Error(data.error);
 
     const allRows   = data.data || [];
-    const submitted = allRows.filter(r => (r.status || '').trim() === '提出済');
-    const drafts    = allRows.filter(r => (r.status || '').trim() === '下書き');
+    // 内容が完全一致する重複行を除外（過去の同時保存等でシートに残った二重行対策）
+    const submitted = dedupeReportRows(allRows.filter(r => (r.status || '').trim() === '提出済'));
+    const drafts    = dedupeReportRows(allRows.filter(r => (r.status || '').trim() === '下書き'));
 
     if (submitted.length > 0) {
       State.submitId    = submitted[0].submitId;
@@ -352,6 +353,22 @@ async function loadDraftReport() {
   } finally {
     hideLoading();
   }
+}
+
+// 内容が完全一致する行を重複とみなして除外する（同日複数コマ等の正当な別行は残す）
+function dedupeReportRows(rows) {
+  const seen = new Set();
+  const out = [];
+  rows.forEach(r => {
+    const key = [
+      r.date, r.category, r.rateType, r.startTime, r.endTime,
+      r.transport, r.destination, r.travelAmount, r.note,
+    ].join('|');
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(r);
+  });
+  return out;
 }
 
 function addRowWithData(r) {

@@ -89,6 +89,23 @@ function sheetTimeToString(val) {
   return String(val);
 }
 
+// ========== 排他ロック ==========
+
+/**
+ * 月報の書き込み処理を排他制御する。
+ * 複数の保存/提出が同時に実行されると「削除→挿入」の間に競合し、
+ * 行が二重挿入されるため、スクリプトロックで直列化する。
+ */
+function withReportLock(fn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000); // 最大20秒待機
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // ========== 月報一時保存 ==========
 
 /**
@@ -99,34 +116,37 @@ function sheetTimeToString(val) {
 function saveReport(body) {
   validateReportBody(body);
 
-  const year = parseInt(body.year);
-  const month = parseInt(body.month);
-  const sheet = getOrCreateReportSheet(year);
+  return withReportLock(() => {
+    const year = parseInt(body.year);
+    const month = parseInt(body.month);
+    const sheet = getOrCreateReportSheet(year);
 
-  // 既存の下書き行を削除（提出済みは残す）
-  deleteReportRows(sheet, body.instructorName, year, month, '下書き');
+    // 既存の下書き行を削除（提出済みは残す）
+    deleteReportRows(sheet, body.instructorName, year, month, '下書き');
 
-  const now = new Date();
-  // submitId は最初の保存時に生成し、以降は同じものを使う
-  const submitId = body.submitId || generateUUID();
+    const now = new Date();
+    // submitId は最初の保存時に生成し、以降は同じものを使う
+    const submitId = body.submitId || generateUUID();
 
-  const newRows = (body.rows || []).map(r => buildRow(r, {
-    submitId,
-    instructorName: body.instructorName,
-    clubName: body.clubName,
-    year,
-    month,
-    status: '下書き',
-    submittedAt: '',
-    updatedAt: now,
-  }));
+    const newRows = (body.rows || []).map(r => buildRow(r, {
+      submitId,
+      instructorName: body.instructorName,
+      clubName: body.clubName,
+      year,
+      month,
+      status: '下書き',
+      submittedAt: '',
+      updatedAt: now,
+    }));
 
-  if (newRows.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
-      .setValues(newRows);
-  }
+    if (newRows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
+        .setValues(newRows);
+    }
 
-  return { success: true, submitId };
+    SpreadsheetApp.flush();
+    return { success: true, submitId };
+  });
 }
 
 // ========== 月報提出 ==========
@@ -139,42 +159,46 @@ function saveReport(body) {
 function submitReport(body) {
   validateReportBody(body);
 
-  const year = parseInt(body.year);
-  const month = parseInt(body.month);
-  const sheet = getOrCreateReportSheet(year);
+  const result = withReportLock(() => {
+    const year = parseInt(body.year);
+    const month = parseInt(body.month);
+    const sheet = getOrCreateReportSheet(year);
 
-  // 既存の提出済み行を削除（再提出を許可）
-  deleteReportRows(sheet, body.instructorName, year, month, '提出済');
-  // 下書き行を削除
-  deleteReportRows(sheet, body.instructorName, year, month, '下書き');
+    // 既存の提出済み行を削除（再提出を許可）
+    deleteReportRows(sheet, body.instructorName, year, month, '提出済');
+    // 下書き行を削除
+    deleteReportRows(sheet, body.instructorName, year, month, '下書き');
 
-  const now = new Date();
-  const submitId = body.submitId || generateUUID();
+    const now = new Date();
+    const submitId = body.submitId || generateUUID();
 
-  const newRows = (body.rows || []).map(r => buildRow(r, {
-    submitId,
-    instructorName: body.instructorName,
-    clubName: body.clubName,
-    year,
-    month,
-    status: '提出済',
-    submittedAt: now,
-    updatedAt: now,
-  }));
+    const newRows = (body.rows || []).map(r => buildRow(r, {
+      submitId,
+      instructorName: body.instructorName,
+      clubName: body.clubName,
+      year,
+      month,
+      status: '提出済',
+      submittedAt: now,
+      updatedAt: now,
+    }));
 
-  if (newRows.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
-      .setValues(newRows);
-  }
+    if (newRows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
+        .setValues(newRows);
+    }
 
-  // setValuesのバッファをシートにコミットしてから謝金計算を実行
-  SpreadsheetApp.flush();
-  calcFee({ instructorName: body.instructorName, year, month });
+    // setValuesのバッファをシートにコミットしてから謝金計算を実行
+    SpreadsheetApp.flush();
+    calcFee({ instructorName: body.instructorName, year, month });
 
-  // 事務局へ提出通知メール
-  notifyAdminOnSubmit(body.instructorName, body.clubName, year, month, now);
+    return { submitId, now };
+  });
 
-  return { success: true, submitId };
+  // 事務局へ提出通知メール（ロック外で実行）
+  notifyAdminOnSubmit(body.instructorName, body.clubName, parseInt(body.year), parseInt(body.month), result.now);
+
+  return { success: true, submitId: result.submitId };
 }
 
 // ========== 月報修正（事務局） ==========
@@ -186,36 +210,38 @@ function submitReport(body) {
 function updateReport(body) {
   validateReportBody(body);
 
-  const year = parseInt(body.year);
-  const month = parseInt(body.month);
-  const sheet = getOrCreateReportSheet(year);
+  return withReportLock(() => {
+    const year = parseInt(body.year);
+    const month = parseInt(body.month);
+    const sheet = getOrCreateReportSheet(year);
 
-  deleteReportRows(sheet, body.instructorName, year, month, '提出済');
-  deleteReportRows(sheet, body.instructorName, year, month, '下書き');
+    deleteReportRows(sheet, body.instructorName, year, month, '提出済');
+    deleteReportRows(sheet, body.instructorName, year, month, '下書き');
 
-  const now = new Date();
-  const submitId = body.submitId || generateUUID();
+    const now = new Date();
+    const submitId = body.submitId || generateUUID();
 
-  const newRows = (body.rows || []).map(r => buildRow(r, {
-    submitId,
-    instructorName: body.instructorName,
-    clubName: body.clubName,
-    year,
-    month,
-    status: '提出済',
-    submittedAt: body.submittedAt || now,
-    updatedAt: now,
-  }));
+    const newRows = (body.rows || []).map(r => buildRow(r, {
+      submitId,
+      instructorName: body.instructorName,
+      clubName: body.clubName,
+      year,
+      month,
+      status: '提出済',
+      submittedAt: body.submittedAt || now,
+      updatedAt: now,
+    }));
 
-  if (newRows.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
-      .setValues(newRows);
-  }
+    if (newRows.length > 0) {
+      sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
+        .setValues(newRows);
+    }
 
-  SpreadsheetApp.flush();
-  calcFee({ instructorName: body.instructorName, year, month });
+    SpreadsheetApp.flush();
+    calcFee({ instructorName: body.instructorName, year, month });
 
-  return { success: true, submitId };
+    return { success: true, submitId };
+  });
 }
 
 // ========== ダッシュボードデータ取得 ==========
