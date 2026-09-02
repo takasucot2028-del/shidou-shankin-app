@@ -506,13 +506,16 @@ function addRow() {
     }
   });
 
-  const prevStart = tbody.rows[0] ? tbody.rows[0].querySelector('.inp-start').value : '';
-  const prevEnd   = tbody.rows[0] ? tbody.rows[0].querySelector('.inp-end').value   : '';
+  const prevRow   = tbody.rows[0] || null;
+  const prevStart = prevRow ? prevRow.querySelector('.inp-start').value : '';
+  const prevEnd   = prevRow ? prevRow.querySelector('.inp-end').value   : '';
+  const prevDest  = prevRow ? prevRow.querySelector('.inp-dest').value  : '';
 
   tbody.insertBefore(tr, tbody.firstChild);
 
   if (prevStart) tr.querySelector('.inp-start').value = prevStart;
   if (prevEnd)   tr.querySelector('.inp-end').value   = prevEnd;
+  if (prevDest)  tr.querySelector('.inp-dest').value  = prevDest;
   if (prevStart || prevEnd) recalcRow(tr);
 
   return tr;
