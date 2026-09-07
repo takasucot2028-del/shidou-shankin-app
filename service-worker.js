@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shidou-report-v9';
+const CACHE_NAME = 'shidou-report-v10';
 
 const PRECACHE_FILES = [
   './',
@@ -36,12 +36,19 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // GAS APIはネットワーク優先（オフライン時はエラーレスポンスを返す）
+  // GAS APIはネットワーク優先。失敗時はエラーレスポンスを返す。
+  // ※ネットワーク断だけでなく、デプロイURL無効(404)や権限不足でもCORSにより
+  //   fetchがrejectするため、原因を区別してメッセージを出し分ける。
   if (url.hostname.includes('script.google.com')) {
     event.respondWith(
       fetch(event.request).catch(() =>
         new Response(
-          JSON.stringify({ success: false, error: 'オフラインのため通信できません' }),
+          JSON.stringify({
+            success: false,
+            error: self.navigator.onLine
+              ? 'サーバーに接続できません。GASのデプロイURLが無効か、アクセス権限（「全員」に設定されているか）をご確認ください。'
+              : 'オフラインのため通信できません',
+          }),
           { headers: { 'Content-Type': 'application/json' } }
         )
       )
