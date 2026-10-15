@@ -575,8 +575,17 @@ async function bulkSendPaySlipEmails() {
       showToast('メール送信に失敗しました: ' + (res.error || '不明なエラー'), 'error');
       return;
     }
-    showToast(ymLabel + '分の給与明細メールを ' + res.sentCount + ' 件送信しました'
-      + (res.skippedCount > 0 ? '（メールアドレス未登録 ' + res.skippedCount + ' 件スキップ）' : ''), 'success');
+    // 送信失敗があれば件数と氏名を出す（Gmailの日次上限超過などで届かないことがある）
+    const failed = res.failedCount || 0;
+    let msg = ymLabel + '分の給与明細メールを ' + res.sentCount + ' 件送信しました';
+    if (res.skippedCount > 0) msg += '（メールアドレス未登録 ' + res.skippedCount + ' 件スキップ）';
+    if (failed > 0) {
+      msg += ' / 送信失敗 ' + failed + ' 件: ' + (res.failedList || []).join('、');
+      showToast(msg, 'error');
+      console.warn('給与明細メール送信失敗:', res.failedList);
+    } else {
+      showToast(msg, 'success');
+    }
   } catch (e) {
     showToast('メール送信に失敗しました: ' + e.message, 'error');
   } finally {
@@ -1457,20 +1466,46 @@ function recalcEditRow(tr) {
   const start    = tr.querySelector('.edit-inp-start').value;
   const end      = tr.querySelector('.edit-inp-end').value;
   const category = tr.querySelector('.edit-sel-category').value;
-  const hours    = calcAdminInstructionHours(start, end, category, AdminState.editInstructorType);
+  const date     = tr.querySelector('.edit-inp-date').value;
+  const hours    = calcAdminInstructionHours(start, end, category, AdminState.editInstructorType, date);
   const inp      = tr.querySelector('.edit-inp-hours');
   inp.value          = hours > 0 ? formatAdminHours(hours) : '';
   inp.dataset.hours  = hours;
 }
 
-function calcAdminInstructionHours(startTime, endTime, category, instructorType) {
+/**
+ * 教員の勤務時間控除（16:40以降のみ有効）を適用すべき行かを判定する。
+ * 平日は常に対象。長期休暇は日付が平日のときだけ対象とし、土日は
+ * 学校勤務がないため通常の土日と同じ扱い（控除なし）にする。
+ * ※GAS側 isTeacherCutTarget と同一ロジック。片方だけ変更しないこと。
+ */
+function isAdminTeacherCutTarget(category, dateValue) {
+  const cat = String(category).trim();
+  if (cat === '平日') return true;
+  if (cat !== '長期休暇') return false;
+  const day = adminWeekdayIndexOf(dateValue);
+  if (day === null) return true;
+  return day !== 0 && day !== 6;
+}
+
+function adminWeekdayIndexOf(dateValue) {
+  if (!dateValue) return null;
+  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue.getDay();
+  const m = String(dateValue).trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d.getTime()) ? null : d.getDay();
+}
+
+function calcAdminInstructionHours(startTime, endTime, category, instructorType, dateValue) {
   const startMin = adminTimeToMinutes(startTime);
   const endMin   = adminTimeToMinutes(endTime);
   if (startMin === null || endMin === null || endMin <= startMin) return 0;
 
   let effectiveMin;
-  const isTeacher     = instructorType === '教員';
-  const isWeekdayLike = category === '平日' || category === '長期休暇';
+  // 長期休暇中の土日は学校勤務がないため、教員の勤務時間控除を行わない
+  const isTeacher     = String(instructorType).trim() === '教員';
+  const isWeekdayLike = isAdminTeacherCutTarget(category, dateValue);
 
   if (isTeacher && isWeekdayLike) {
     const effectiveStart = Math.max(startMin, Config.TEACHER_WORK_END_MINUTES);
@@ -1479,7 +1514,7 @@ function calcAdminInstructionHours(startTime, endTime, category, instructorType)
     effectiveMin = endMin - startMin;
   }
 
-  const maxMin     = (Config.MAX_HOURS[category] || 0) * 60;
+  const maxMin     = (Config.MAX_HOURS[String(category).trim()] || 0) * 60;
   const cappedMin  = Math.min(effectiveMin, maxMin);
   const flooredMin = Math.floor(cappedMin / 15) * 15;
   return flooredMin / 60;
@@ -1542,7 +1577,7 @@ async function saveReportEdit() {
     if (!date && !start && !end) return;
 
     const category = tr.querySelector('.edit-sel-category')?.value || '平日';
-    const calcH    = calcAdminInstructionHours(start, end, category, AdminState.editInstructorType);
+    const calcH    = calcAdminInstructionHours(start, end, category, AdminState.editInstructorType, date);
 
     editRows.push({
       date,

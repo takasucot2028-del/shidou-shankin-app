@@ -29,6 +29,9 @@ function doGet(e) {
       case 'getInstructors':
         result = getInstructors();
         break;
+      case 'getInstructorsPublic':
+        result = getInstructorsPublic();
+        break;
       case 'getDashboard':
         result = getDashboard(e.parameter);
         break;

@@ -29,8 +29,8 @@ function notifyAdminOnSubmit(instructorName, clubName, year, month, submittedAt)
   ].join('\n');
 
   adminEmails.forEach(email => {
-    sendMail(email, subject, body);
-    logNotification(email, '提出通知', year + '年' + month + '月', '送信済');
+    const ok = sendMail(email, subject, body);
+    logNotification(email, '提出通知', year + '年' + month + '月', ok ? '送信済' : '送信失敗');
   });
 }
 
@@ -79,8 +79,9 @@ function sendReminderEmails(daysBeforeDeadline) {
       getOrgSignature(),
     ].join('\n');
 
-    sendMail(instructor.email, subject, body);
-    logNotification(instructor.email, 'リマインド', targetYear + '年' + adjustedMonth + '月', '送信済');
+    const ok = sendMail(instructor.email, subject, body);
+    logNotification(instructor.email, 'リマインド', targetYear + '年' + adjustedMonth + '月',
+      ok ? '送信済' : '送信失敗');
   });
 }
 
@@ -129,8 +130,9 @@ function notifyAdminUnsubmitted() {
   const body = lines.join('\n');
 
   adminEmails.forEach(email => {
-    sendMail(email, subject, body);
-    logNotification(email, '未提出者通知', targetYear + '年' + adjustedMonth + '月', '送信済');
+    const ok = sendMail(email, subject, body);
+    logNotification(email, '未提出者通知', targetYear + '年' + adjustedMonth + '月',
+      ok ? '送信済' : '送信失敗');
   });
 }
 
@@ -178,6 +180,7 @@ function sendPaySlipEmails(body) {
 
   let sentCount = 0;
   let skippedCount = 0;
+  const failedList = [];   // 送信に失敗した指導者名（画面に出して再送判断に使う）
 
   feeRows.forEach(row => {
     const name = String(row[1]).trim();
@@ -222,23 +225,47 @@ function sendPaySlipEmails(body) {
       getOrgSignature(),
     ].join('\n');
 
-    sendMail(email, subject, mailBody);
-    logNotification(email, '給与明細', ymLabel, '送信済');
-    sentCount++;
+    const ok = sendMail(email, subject, mailBody);
+    logNotification(email, '給与明細', ymLabel, ok ? '送信済' : '送信失敗');
+    if (ok) {
+      sentCount++;
+    } else {
+      failedList.push(name);
+    }
   });
 
-  Logger.log('[sendPaySlipEmails] 完了: year=%s, month=%s, sent=%s, skipped=%s', year, month, sentCount, skippedCount);
+  Logger.log('[sendPaySlipEmails] 完了: year=%s, month=%s, sent=%s, skipped=%s, failed=%s',
+    year, month, sentCount, skippedCount, failedList.length);
+  if (failedList.length > 0) {
+    Logger.log('[sendPaySlipEmails] 送信失敗: %s', failedList.join(', '));
+  }
 
-  return { success: true, sentCount: sentCount, skippedCount: skippedCount };
+  return {
+    success: true,
+    sentCount: sentCount,
+    skippedCount: skippedCount,
+    failedCount: failedList.length,
+    failedList: failedList,
+  };
 }
 
 // ========== メール送信 ==========
 
+/**
+ * メールを送信し、成否を boolean で返す。
+ *
+ * ※以前は例外を飲み込んで戻り値を返さず、呼び出し側が無条件に
+ *   「送信済」と記録していたため、Gmailの日次上限超過などで届いて
+ *   いないのに「送信済」と記録・表示されていた。
+ */
 function sendMail(to, subject, body) {
   try {
     GmailApp.sendEmail(to, subject, body);
+    return true;
   } catch (err) {
     console.error('メール送信失敗 to=' + to + ' err=' + err.message);
+    Logger.log('[sendMail] 送信失敗 to=%s err=%s', to, err.message);
+    return false;
   }
 }
 

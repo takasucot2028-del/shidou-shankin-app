@@ -263,7 +263,8 @@ function initYearMonth() {
 
 async function loadInstructors() {
   try {
-    const data = await gasGet({ action: 'getInstructors' });
+    // 口座情報を含まない公開用の一覧を使う（この画面はログイン前に呼ぶ）
+    const data = await gasGet({ action: 'getInstructorsPublic' });
     if (!data.success) throw new Error(data.error);
     State.instructors = data.data || [];
     populateLoginSelect();
@@ -540,7 +541,8 @@ function recalcRow(tr) {
     ? (State.currentInstructor['指導者種別'] || State.currentInstructor.type || '一般')
     : '一般';
 
-  const hours = calcInstructionHours(start, end, category, instrType);
+  const date  = tr.querySelector('.inp-date').value;
+  const hours = calcInstructionHours(start, end, category, instrType, date);
   const hoursInput = tr.querySelector('.inp-hours');
   hoursInput.value = hours > 0 ? formatHours(hours) : '';
   hoursInput.dataset.hours = hours;
@@ -550,14 +552,40 @@ function recalcRow(tr) {
 
 // ========== 謝金計算ロジック（フロント側・概算） ==========
 
-function calcInstructionHours(startTime, endTime, category, instructorType) {
+/**
+ * 教員の勤務時間控除（16:40以降のみ有効）を適用すべき行かを判定する。
+ * 平日は常に対象。長期休暇は日付が平日のときだけ対象とし、土日は
+ * 学校勤務がないため通常の土日と同じ扱い（控除なし）にする。
+ * ※GAS側 isTeacherCutTarget と同一ロジック。片方だけ変更しないこと。
+ */
+function isTeacherCutTargetRow(category, dateValue) {
+  const cat = String(category).trim();
+  if (cat === '平日') return true;
+  if (cat !== '長期休暇') return false;
+
+  const day = weekdayIndexOfValue(dateValue);
+  if (day === null) return true;      // 日付不明なら従来どおり控除する
+  return day !== 0 && day !== 6;      // 日曜(0)・土曜(6)は控除しない
+}
+
+function weekdayIndexOfValue(dateValue) {
+  if (!dateValue) return null;
+  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue.getDay();
+  const m = String(dateValue).trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return isNaN(d.getTime()) ? null : d.getDay();
+}
+
+function calcInstructionHours(startTime, endTime, category, instructorType, dateValue) {
   const startMin = timeToMinutes(startTime);
   const endMin   = timeToMinutes(endTime);
   if (startMin === null || endMin === null || endMin <= startMin) return 0;
 
   let effectiveMin;
-  const isTeacher = instructorType === '教員';
-  const isWeekdayLike = category === '平日' || category === '長期休暇';
+  // 長期休暇中の土日は学校勤務がないため、教員の勤務時間控除を行わない
+  const isTeacher = String(instructorType).trim() === '教員';
+  const isWeekdayLike = isTeacherCutTargetRow(category, dateValue);
 
   if (isTeacher && isWeekdayLike) {
     const effectiveStart = Math.max(startMin, Config.TEACHER_WORK_END_MINUTES);
@@ -566,7 +594,7 @@ function calcInstructionHours(startTime, endTime, category, instructorType) {
     effectiveMin = endMin - startMin;
   }
 
-  const maxMin     = (Config.MAX_HOURS[category] || 0) * 60;
+  const maxMin     = (Config.MAX_HOURS[String(category).trim()] || 0) * 60;
   const cappedMin  = Math.min(effectiveMin, maxMin);
   const flooredMin = Math.floor(cappedMin / 15) * 15; // 15分単位切捨
 
@@ -633,7 +661,7 @@ function collectRows() {
       ? (State.currentInstructor['指導者種別'] || State.currentInstructor.type || '一般')
       : '一般';
     const category = tr.querySelector('.sel-category')?.value || '平日';
-    const calcH = calcInstructionHours(start, end, category, instrType);
+    const calcH = calcInstructionHours(start, end, category, instrType, date);
 
     rows.push({
       date,

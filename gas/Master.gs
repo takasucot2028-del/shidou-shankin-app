@@ -13,6 +13,37 @@
  * 全指導者を返す（PINは除外）
  * GET ?action=getInstructors
  */
+/**
+ * 指導者画面（ログイン前）向けの一覧。
+ * GET ?action=getInstructorsPublic
+ *
+ * ※getInstructors は口座情報・メールアドレスを含むため、認証のない
+ *   指導者画面からは呼ばない。画面が必要とする項目だけを返す。
+ */
+function getInstructorsPublic() {
+  const sheet = getSheet('指導者マスタ');
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+
+  // 返して良い列だけを明示的に列挙する（列追加時に個人情報が漏れないように）
+  const ALLOWED = ['氏名', 'クラブ名', '区分', '指導者種別'];
+  const idx = {};
+  ALLOWED.forEach(key => { idx[key] = headers.indexOf(key); });
+
+  const rows = data.slice(1)
+    .filter(r => r[1])
+    .map(row => {
+      const obj = {};
+      ALLOWED.forEach(key => {
+        obj[key] = idx[key] >= 0 ? row[idx[key]] : '';
+      });
+      return obj;
+    });
+
+  return { success: true, data: rows };
+}
+
+// ※この関数は口座情報・メールアドレスを含む。事務局画面専用。
 function getInstructors() {
   const sheet = getSheet('指導者マスタ');
   const data = sheet.getDataRange().getValues();

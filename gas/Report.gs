@@ -188,16 +188,29 @@ function submitReport(body) {
         .setValues(newRows);
     }
 
-    // setValuesのバッファをシートにコミットしてから謝金計算を実行
+    // setValuesのバッファをシートにコミットしてから謝金計算を実行。
+    // forceRecalc=true：事務局の手修正フラグが立っていても再計算する。
+    // ※再提出で内容が変わっているのに旧金額が残ると、払い漏れ・過大払いの
+    //   どちらも無警告で起きるため、月報の内容を常に正とする。
     SpreadsheetApp.flush();
-    calcFee({ instructorName: body.instructorName, year, month });
+    const feeRes = calcFee({
+      instructorName: body.instructorName, year, month, forceRecalc: true,
+    });
+    if (!feeRes || !feeRes.success) {
+      Logger.log('[submitReport] 警告: 謝金計算に失敗しました: %s',
+        feeRes ? feeRes.error : '(戻り値なし)');
+    }
 
-    return { submitId, now };
+    return { submitId, now, feeError: (feeRes && feeRes.success) ? null : (feeRes ? feeRes.error : '謝金計算に失敗しました') };
   });
 
   // 事務局へ提出通知メール（ロック外で実行）
   notifyAdminOnSubmit(body.instructorName, body.clubName, parseInt(body.year), parseInt(body.month), result.now);
 
+  if (result.feeError) {
+    return { success: true, submitId: result.submitId,
+      warning: '月報は提出しましたが謝金の計算に失敗しました: ' + result.feeError };
+  }
   return { success: true, submitId: result.submitId };
 }
 
@@ -237,8 +250,17 @@ function updateReport(body) {
         .setValues(newRows);
     }
 
+    // forceRecalc=true：手修正フラグを無視して再計算する（Dの方針）
     SpreadsheetApp.flush();
-    calcFee({ instructorName: body.instructorName, year, month });
+    const feeRes = calcFee({
+      instructorName: body.instructorName, year, month, forceRecalc: true,
+    });
+    if (!feeRes || !feeRes.success) {
+      Logger.log('[updateReport] 警告: 謝金計算に失敗しました: %s',
+        feeRes ? feeRes.error : '(戻り値なし)');
+      return { success: true, submitId, warning: '月報は保存しましたが謝金の再計算に失敗しました: ' +
+        (feeRes ? feeRes.error : '不明なエラー') };
+    }
 
     return { success: true, submitId };
   });

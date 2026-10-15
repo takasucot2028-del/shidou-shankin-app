@@ -208,7 +208,8 @@ function computeFee(rows, instructor) {
       startTime,
       endTime,
       category,
-      instructor.type
+      instructor.type,
+      row[COL.DATE]
     );
 
     // 行の謝金計算時間を更新
@@ -248,7 +249,40 @@ function computeFee(rows, instructor) {
 /**
  * 1行分の謝金計算時間を求める（15分単位切捨）
  */
-function calcInstructionHours(startTime, endTime, category, instructorType) {
+/**
+ * 教員の勤務時間控除（16:40以降のみ有効）を適用すべき行かを判定する。
+ *
+ * 平日区分は常に対象。長期休暇区分は「日付が平日のとき」だけ対象とし、
+ * 土日は学校勤務がないため通常の土日と同じ扱い（控除なし）にする。
+ * 日付が渡されない場合は、従来どおり区分だけで判定する。
+ */
+function isTeacherCutTarget(category, dateValue) {
+  const cat = String(category).trim();
+  if (cat === '平日') return true;
+  if (cat !== '長期休暇') return false;
+
+  const day = weekdayIndexOf(dateValue);
+  if (day === null) return true;      // 日付不明なら従来どおり控除する
+  return day !== 0 && day !== 6;      // 日曜(0)・土曜(6)は控除しない
+}
+
+/**
+ * 日付値（Date / "yyyy-MM-dd" 文字列）から曜日番号(0=日〜6=土)を返す。
+ * 判定できない場合は null。
+ */
+function weekdayIndexOf(dateValue) {
+  if (!dateValue) return null;
+  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue.getDay();
+
+  const s = String(dateValue).trim();
+  const m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (isNaN(d.getTime())) return null;
+  return d.getDay();
+}
+
+function calcInstructionHours(startTime, endTime, category, instructorType, dateValue) {
   const startMin = timeToMinutes(startTime);
   const endMin = timeToMinutes(endTime);
 
@@ -264,9 +298,10 @@ function calcInstructionHours(startTime, endTime, category, instructorType) {
                '区分は 平日/休日/長期休暇/大会引率 のいずれかである必要があります。', cat);
   }
 
-  // 教員かつ平日・長期休暇は16:40以降のみ有効
+  // 教員かつ（平日 または 長期休暇の平日）は16:40以降のみ有効。
+  // 長期休暇中の土日は学校勤務がないため控除しない。
   const isTeacher = String(instructorType).trim() === '教員';
-  const isWeekdayOrLongVacation = cat === '平日' || cat === '長期休暇';
+  const isWeekdayOrLongVacation = isTeacherCutTarget(cat, dateValue);
 
   if (isTeacher && isWeekdayOrLongVacation) {
     const effectiveStart = Math.max(startMin, TEACHER_WORK_END_MINUTES);
@@ -578,7 +613,8 @@ function calcAllFees(body) {
         row[COL.START_TIME],
         row[COL.END_TIME],
         row[COL.CATEGORY],
-        instructor.type
+        instructor.type,
+        row[COL.DATE]
       );
 
       // 月報シートへの書き込みをマップに蓄積（実際の書き込みは後でまとめて行う）
@@ -1128,7 +1164,7 @@ function generateCategorySummarySheet(body) {
     if (CATEGORIES.indexOf(category) === -1) return;
 
     const calcHours = calcInstructionHours(
-      row[COL.START_TIME], row[COL.END_TIME], category, inst.type
+      row[COL.START_TIME], row[COL.END_TIME], category, inst.type, row[COL.DATE]
     );
 
     if (!perInstructor[name]) {
@@ -1520,7 +1556,7 @@ function auditMonthlyHours(year, month) {
       typeCache[name] = inst ? inst.type : '一般';
     }
     agg[name].hours += calcInstructionHours(
-      row[COL.START_TIME], row[COL.END_TIME], row[COL.CATEGORY], typeCache[name]);
+      row[COL.START_TIME], row[COL.END_TIME], row[COL.CATEGORY], typeCache[name], row[COL.DATE]);
   });
 
   Logger.log('========== %s年%s月 提出済み月報の集計 ==========', y, m);
