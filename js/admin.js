@@ -17,11 +17,103 @@ const AdminState = {
 
 // ========== 初期化 ==========
 
+// ========== 事務局認証 ==========
+
+const ADMIN_AUTH_KEY = 'admin_auth_v1';
+
+function getAdminAuth() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(ADMIN_AUTH_KEY));
+    if (!s || !s.token) return null;
+    if (s.expiresAt && s.expiresAt < Date.now()) { clearAdminAuth(); return null; }
+    return s;
+  } catch { return null; }
+}
+function setAdminAuth(token, expiresAt) {
+  sessionStorage.setItem(ADMIN_AUTH_KEY, JSON.stringify({ token, expiresAt }));
+}
+function clearAdminAuth() { sessionStorage.removeItem(ADMIN_AUTH_KEY); }
+
+function adminToken() {
+  const s = getAdminAuth();
+  return s && s.token ? s.token : '';
+}
+
+function showAdminLogin() {
+  document.getElementById('admin-login-section').classList.remove('hidden');
+  document.getElementById('admin-main').classList.add('hidden');
+  document.getElementById('admin-logout-btn').classList.add('hidden');
+}
+
+function showAdminContent() {
+  document.getElementById('admin-login-section').classList.add('hidden');
+  document.getElementById('admin-main').classList.remove('hidden');
+  document.getElementById('admin-logout-btn').classList.remove('hidden');
+}
+
+async function onAdminLogin() {
+  const pw = document.getElementById('admin-password').value;
+  const errEl = document.getElementById('admin-login-error');
+  errEl.classList.add('hidden');
+  errEl.textContent = '';
+
+  if (!pw) { showAdminLoginError('パスワードを入力してください'); return; }
+
+  document.getElementById('admin-login-btn').disabled = true;
+  showLoading();
+  try {
+    // ログイン自体はトークン不要なので、token を付けずに直接送る
+    const res = await gasPostRaw({ action: 'adminLogin', password: pw });
+    if (!res.success) { showAdminLoginError(res.error || 'パスワードが正しくありません'); return; }
+
+    setAdminAuth(res.token, res.expiresAt);
+    document.getElementById('admin-password').value = '';
+    showAdminContent();
+    startAdminScreen();
+  } catch (e) {
+    showAdminLoginError('通信エラーが発生しました: ' + e.message);
+  } finally {
+    document.getElementById('admin-login-btn').disabled = false;
+    hideLoading();
+  }
+}
+
+function showAdminLoginError(msg) {
+  const el = document.getElementById('admin-login-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function onAdminLogout() {
+  const t = adminToken();
+  if (t) { gasPostRaw({ action: 'logout', token: t }).catch(() => {}); }
+  clearAdminAuth();
+  showAdminLogin();
+}
+
+/** ログイン後に実行する初期読み込み */
+function startAdminScreen() {
+  loadMasterTable();
+  loadDashboard();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initYearMonthSelects();
   initTabs();
-  loadMasterTable();
-  loadDashboard();
+
+  document.getElementById('admin-login-btn').addEventListener('click', onAdminLogin);
+  document.getElementById('admin-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') onAdminLogin();
+  });
+  document.getElementById('admin-logout-btn').addEventListener('click', onAdminLogout);
+
+  // 既存セッションがあればそのまま画面へ
+  if (getAdminAuth()) {
+    showAdminContent();
+    startAdminScreen();
+  } else {
+    showAdminLogin();
+  }
 
   document.getElementById('db-load-btn').addEventListener('click', loadDashboard);
   document.getElementById('db-bulk-report-print-btn').addEventListener('click', printAllReports);
@@ -122,7 +214,7 @@ async function loadDashboard() {
   const month = document.getElementById('db-month').value;
   showLoading();
   try {
-    const res = await gasGet({ action: 'getDashboard', year, month });
+    const res = await gasPost({ action: 'getDashboard', year, month });
     if (!res.success) throw new Error(res.error);
     renderDashboard(res);
   } catch (e) {
@@ -228,7 +320,7 @@ async function loadDetail() {
 
   showLoading();
   try {
-    const res = await gasGet({ action: 'getReport', instructorName: name, year, month });
+    const res = await gasPost({ action: 'getReport', instructorName: name, year, month });
     if (!res.success) throw new Error(res.error);
     if (!res.data || res.data.length === 0) {
       document.getElementById('detail-content').classList.add('hidden');
@@ -777,7 +869,7 @@ async function printAllReports() {
 
   showLoading();
   try {
-    const dashRes = await gasGet({ action: 'getDashboard', year, month });
+    const dashRes = await gasPost({ action: 'getDashboard', year, month });
     if (!dashRes.success) throw new Error(dashRes.error);
 
     const submittedList = (dashRes.statusList || []).filter(r => r.status === '提出済');
@@ -788,7 +880,7 @@ async function printAllReports() {
 
     const [reportResults, feeRes] = await Promise.all([
       Promise.all(submittedList.map(r =>
-        gasGet({ action: 'getReport', instructorName: r.instructorName, year, month })
+        gasPost({ action: 'getReport', instructorName: r.instructorName, year, month })
       )),
       gasPost({ action: 'calcAllFees', year, month }),
     ]);
@@ -1181,7 +1273,7 @@ function buildSlipDetailRows(inst, fee) {
 
 async function loadMasterTable() {
   try {
-    const res = await gasGet({ action: 'getInstructors' });
+    const res = await gasPost({ action: 'getInstructors' });
     if (!res.success) throw new Error(res.error);
     AdminState.instructors = res.data || [];
     renderMasterTable(AdminState.instructors);
@@ -1637,19 +1729,11 @@ async function saveReportEdit() {
 
 // ========== GAS 通信 ==========
 
-async function gasGet(params) {
-  const url = new URL(Config.GAS_URL);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString(), {
-    method:   'GET',
-    redirect: 'follow',
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.json();
-}
-
-async function gasPost(body) {
-  // Content-Type を text/plain にすることでプリフライトを回避
+/**
+ * トークンを付けずにPOSTする（ログイン・ログアウト専用）
+ * Content-Type を text/plain にすることでプリフライトを回避する
+ */
+async function gasPostRaw(body) {
   const res = await fetch(Config.GAS_URL, {
     method:   'POST',
     redirect: 'follow',
@@ -1659,6 +1743,32 @@ async function gasPost(body) {
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
+
+/**
+ * 事務局トークンを自動で付与してPOSTする。
+ *
+ * 認証切れ・権限不足はここで一括処理し、ログイン画面に戻す。
+ * 個々の呼び出し側でトークンを付け忘れても漏れないよう中央化している。
+ */
+async function gasPost(body) {
+  const payload = Object.assign({}, body);
+  if (!payload.token) payload.token = adminToken();
+
+  const json = await gasPostRaw(payload);
+
+  if (json && (json.authRequired || json.forbidden)) {
+    clearAdminAuth();
+    showAdminLogin();
+    throw new Error(json.error || '再ログインが必要です');
+  }
+  return json;
+}
+
+/**
+ * GET通信。
+ * ※認証が必要なアクションはトークンがURLに残るため使用しないこと。
+ *   現在このアプリでは使用していない（すべてPOSTに統一）。
+ */
 
 // ========== ユーティリティ ==========
 

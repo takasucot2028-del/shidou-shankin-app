@@ -23,26 +23,19 @@ function doGet(e) {
 
   try {
     switch (action) {
-      case 'getReport':
-        result = getReport(e.parameter);
-        break;
-      case 'getInstructors':
-        result = getInstructors();
-        break;
+      // ===== 認証不要（個人情報を含まないもののみ） =====
       case 'getInstructorsPublic':
         result = getInstructorsPublic();
         break;
-      case 'getDashboard':
-        result = getDashboard(e.parameter);
-        break;
-      case 'exportSheet':
-        result = exportSheet(e.parameter);
-        break;
-      case 'getPaySlip':
-        result = getPaySlip(e.parameter);
-        break;
+
       default:
-        result = { success: false, error: 'Unknown action: ' + action };
+        // 口座情報・金額・月報を返すアクションはGETでは受け付けない。
+        // トークンをURLに乗せるとGASの実行ログやブラウザ履歴に残るため、
+        // 認証が必要なものはすべてPOST（本文にトークン）で受ける。
+        result = {
+          success: false,
+          error: 'このアクションはGETでは利用できません。POSTでトークンを添えてください: ' + action,
+        };
     }
   } catch (err) {
     result = { success: false, error: err.message };
@@ -64,47 +57,102 @@ function doPost(e) {
 
   try {
     switch (action) {
+      // ===== 認証不要（ログイン処理そのもの） =====
       case 'checkPin':
         result = checkPin(body);
         break;
+      case 'adminLogin':
+        result = adminLogin(body);
+        break;
+      case 'logout':
+        result = logout(body);
+        break;
+      case 'getInstructorsPublic':
+        result = getInstructorsPublic();
+        break;
+
+      // ===== 指導者本人または事務局 =====
+      // requireAuth が body.instructorName と本人の一致を検証する
+      case 'getReport':
+        requireAuth(body, ROLE.INSTRUCTOR);
+        result = getReport(body);
+        break;
+      case 'getPaySlip':
+        requireAuth(body, ROLE.INSTRUCTOR);
+        result = getPaySlip(body);
+        break;
       case 'saveReport':
+        requireAuth(body, ROLE.INSTRUCTOR);
         result = saveReport(body);
         break;
       case 'submitReport':
+        requireAuth(body, ROLE.INSTRUCTOR);
         result = submitReport(body);
         break;
+
+      // ===== 事務局のみ =====
+      case 'getInstructors':
+        requireAuth(body, ROLE.ADMIN);
+        result = getInstructors();
+        break;
+      case 'getDashboard':
+        requireAuth(body, ROLE.ADMIN);
+        result = getDashboard(body);
+        break;
+      case 'exportSheet':
+        requireAuth(body, ROLE.ADMIN);
+        result = exportSheet(body);
+        break;
       case 'updateMaster':
+        requireAuth(body, ROLE.ADMIN);
         result = updateMaster(body);
         break;
+      case 'updateReport':
+        requireAuth(body, ROLE.ADMIN);
+        result = updateReport(body);
+        break;
       case 'calcFee':
+        requireAuth(body, ROLE.ADMIN);
         result = calcFee(body);
         break;
       case 'calcAllFees':
+        requireAuth(body, ROLE.ADMIN);
         result = calcAllFees(body);
         break;
       case 'updateFee':
+        requireAuth(body, ROLE.ADMIN);
         result = updateFee(body);
         break;
       case 'generateTransferSheet':
+        requireAuth(body, ROLE.ADMIN);
         result = generateTransferSheet(body);
         break;
       case 'generateClubSummarySheet':
+        requireAuth(body, ROLE.ADMIN);
         result = generateClubSummarySheet(body);
         break;
       case 'generateCategorySummarySheet':
+        requireAuth(body, ROLE.ADMIN);
         result = generateCategorySummarySheet(body);
         break;
       case 'sendPaySlipEmails':
+        requireAuth(body, ROLE.ADMIN);
         result = sendPaySlipEmails(body);
         break;
-      case 'updateReport':
-        result = updateReport(body);
-        break;
+
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }
   } catch (err) {
-    result = { success: false, error: err.message };
+    // AUTH_REQUIRED / AUTH_FORBIDDEN はフロントが再ログイン判定に使う
+    const msg = String(err.message || err);
+    if (msg.indexOf('AUTH_REQUIRED:') === 0) {
+      result = { success: false, authRequired: true, error: msg.replace('AUTH_REQUIRED:', '') };
+    } else if (msg.indexOf('AUTH_FORBIDDEN:') === 0) {
+      result = { success: false, forbidden: true, error: msg.replace('AUTH_FORBIDDEN:', '') };
+    } else {
+      result = { success: false, error: msg };
+    }
   }
 
   return buildResponse(result);

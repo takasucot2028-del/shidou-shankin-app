@@ -132,6 +132,14 @@ function initialSetup() {
   initMasterSheet();       // Master.gs
   getOrCreateFeeSheet();   // Fee.gs
   getOrCreateNotifyLogSheet(); // Notify.gs
+  getOrCreateSessionSheet();   // Auth.gs（認証トークンの保存先）
   setupAllTriggers();
+
+  // 事務局パスワードが未設定なら警告する（未設定だと事務局画面に入れない）
+  if (!PropertiesService.getScriptProperties().getProperty('ADMIN_PASSWORD')) {
+    console.log('【要対応】事務局パスワードが未設定です。' +
+      'Auth.gs の setAdminPassword() にパスワードを渡して1回実行してください。');
+  }
+
   console.log('初期セットアップ完了');
 }

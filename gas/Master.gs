@@ -215,7 +215,18 @@ function checkPin(body) {
   if (storedPin !== String(body.pin)) {
     return { success: false, error: 'PINが正しくありません' };
   }
-  return { success: true, name: row[1] };
+
+  // PIN照合に成功したので、このあとの通信で使うトークンを発行する。
+  // 以降 月報・給与明細（口座情報を含む）はトークンなしでは取得できない。
+  const name = String(row[1]).trim();
+  const issued = issueToken(ROLE.INSTRUCTOR, name);
+  return {
+    success: true,
+    name: name,
+    token: issued.token,
+    expiresAt: issued.expiresAt,
+    role: ROLE.INSTRUCTOR,
+  };
 }
 
 // ========== バリデーション ==========

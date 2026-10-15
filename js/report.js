@@ -89,10 +89,38 @@ const State = {
 const AUTH_KEY = 'report_auth_v1';
 
 function getAuth() {
-  try { return JSON.parse(sessionStorage.getItem(AUTH_KEY)); } catch { return null; }
+  try {
+    const a = JSON.parse(sessionStorage.getItem(AUTH_KEY));
+    if (!a || !a.token) return null;
+    // 期限切れのトークンは保持しない（サーバー側でも検証している）
+    if (a.expiresAt && a.expiresAt < Date.now()) { clearAuth(); return null; }
+    return a;
+  } catch { return null; }
 }
-function setAuth(name) { sessionStorage.setItem(AUTH_KEY, JSON.stringify({ name })); }
+function setAuth(name, token, expiresAt) {
+  sessionStorage.setItem(AUTH_KEY, JSON.stringify({ name, token, expiresAt }));
+}
 function clearAuth() { sessionStorage.removeItem(AUTH_KEY); }
+
+/** 現在のトークン。未ログインなら空文字 */
+function authToken() {
+  const a = getAuth();
+  return a && a.token ? a.token : '';
+}
+
+/**
+ * サーバーが認証切れを返したときの共通処理。
+ * 該当すれば true を返すので、呼び出し側はそこで中断する。
+ */
+function handleAuthError(res) {
+  if (res && (res.authRequired || res.forbidden)) {
+    clearAuth();
+    showLoginSection();
+    showToast(res.error || '再ログインが必要です', 'error');
+    return true;
+  }
+  return false;
+}
 
 // ========== 初期化 ==========
 
@@ -193,8 +221,8 @@ async function onLogin() {
       showLoginError(res.error || 'PINが正しくありません');
       return;
     }
-    setAuth(name);
-    showFormAfterLogin(name);
+    setAuth(res.name || name, res.token, res.expiresAt);
+    showFormAfterLogin(res.name || name);
   } catch (e) {
     showLoginError('通信エラーが発生しました: ' + e.message);
   } finally {
@@ -267,6 +295,10 @@ function applyLoginToForm(name) {
 }
 
 function onLogout() {
+  // サーバー側のトークンも失効させる（失敗しても画面はログアウトする）
+  const t = authToken();
+  if (t) { gasPost({ action: 'logout', token: t }).catch(() => {}); }
+
   if (!confirm('ログアウトしますか？')) return;
   clearAuth();
   State.currentInstructor = null;
@@ -315,7 +347,7 @@ function initYearMonth() {
 async function loadInstructors() {
   try {
     // 口座情報を含まない公開用の一覧を使う（この画面はログイン前に呼ぶ）
-    const data = await gasGet({ action: 'getInstructorsPublic' });
+    const data = await gasPost({ action: 'getInstructorsPublic' });
     if (!data.success) throw new Error(data.error);
     State.instructors = data.data || [];
     populateLoginSelect();
@@ -378,7 +410,11 @@ async function loadDraftReport() {
 
   showLoading();
   try {
-    const data = await gasGet({ action: 'getReport', instructorName: name, year, month });
+    // 月報はトークン必須のためPOSTで取得する（トークンをURLに残さない）
+    const data = await gasPost({
+      action: 'getReport', token: authToken(), instructorName: name, year, month,
+    });
+    if (handleAuthError(data)) return;
     if (!data.success) throw new Error(data.error);
 
     const allRows   = data.data || [];
@@ -777,6 +813,7 @@ async function onSave() {
   try {
     const body = buildPostBody();
     const res  = await gasPost(body);
+    if (handleAuthError(res)) return;
     if (!res.success) throw new Error(res.error);
     State.submitId = res.submitId;
     showToast('一時保存しました', 'success');
@@ -792,6 +829,7 @@ function buildPostBody(action = 'saveReport') {
   State.rows = rows;
   return {
     action,
+    token:          authToken(),
     submitId:       State.submitId || undefined,
     instructorName: document.getElementById('instructor-name').value,
     clubName:       document.getElementById('club-name').value,
@@ -861,6 +899,7 @@ async function onConfirmSubmit() {
   try {
     const body = buildPostBody('submitReport');
     const res  = await gasPost(body);
+    if (handleAuthError(res)) return;
     if (!res.success) throw new Error(res.error);
     State.submitId   = res.submitId;
     State.isSubmitted = true;
@@ -937,6 +976,11 @@ function onResubmit() {
 
 // ========== GAS 通信 ==========
 
+/**
+ * GET通信。
+ * ※認証が必要なアクションはトークンがURLに残るため使用しないこと。
+ *   現在このアプリでは使用していない（すべてPOSTに統一）。
+ */
 async function gasGet(params) {
   const url = new URL(Config.GAS_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
@@ -1051,12 +1095,15 @@ async function onShowPaySlip() {
   document.getElementById('payslip-not-calculated').classList.add('hidden');
 
   try {
-    const data = await gasGet({
+    // 給与明細は口座情報を含むためトークン必須・POSTで取得する
+    const data = await gasPost({
       action: 'getPaySlip',
+      token: authToken(),
       instructorName: auth.name,
       year,
       month,
     });
+    if (handleAuthError(data)) return;
     if (!data.success) throw new Error(data.error);
 
     if (data.notCalculated) {

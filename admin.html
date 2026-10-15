@@ -17,12 +17,38 @@
 <header class="header">
   <div class="header-inner">
     <h1 class="header-title">事務局管理画面</h1>
-    <span class="header-badge">部活動地域展開 指導謝金管理</span>
+    <div class="header-right">
+      <span class="header-badge">部活動地域展開 指導謝金管理</span>
+      <button type="button" id="admin-logout-btn" class="btn btn-outline-white btn-sm hidden">ログアウト</button>
+    </div>
   </div>
 </header>
 
 <main class="main">
-<div class="container">
+
+  <!-- ========== 事務局ログイン ========== -->
+  <div id="admin-login-section" class="container">
+    <section class="card login-card">
+      <div class="login-icon">🔒</div>
+      <h2 class="section-title">事務局ログイン</h2>
+      <p class="login-desc">事務局パスワードを入力してください。口座情報・謝金額を扱うため認証が必要です。</p>
+      <div class="login-form">
+        <div class="form-group">
+          <label for="admin-password">事務局パスワード <span class="required">*</span></label>
+          <div class="pin-input-wrapper">
+            <input type="password" id="admin-password" placeholder="••••••••" autocomplete="current-password">
+            <button type="button" class="btn-icon pin-toggle" data-target="admin-password" title="表示切替" aria-label="表示切替">👁</button>
+          </div>
+        </div>
+      </div>
+      <div id="admin-login-error" class="login-error hidden"></div>
+      <div class="action-buttons" style="justify-content:center; margin-top:24px;">
+        <button type="button" id="admin-login-btn" class="btn btn-primary" style="min-width:160px;">ログイン</button>
+      </div>
+    </section>
+  </div>
+
+<div class="container hidden" id="admin-main">
 
   <!-- タブナビ -->
   <nav class="tab-nav" role="tablist">
@@ -409,8 +435,8 @@
 </div>
 <div id="toast" class="toast" role="alert" aria-live="polite"></div>
 
-<script src="js/config.js?v=10"></script>
-<script src="js/admin.js?v=10"></script>
+<script src="js/config.js?v=11"></script>
+<script src="js/admin.js?v=11"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js')
