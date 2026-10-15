@@ -1263,6 +1263,9 @@ function clearMasterForm() {
   document.getElementById('m-account-type').value = '普通';
   // PIN入力欄をマスク表示（password）に戻す
   document.getElementById('m-pin').type = 'text';
+  // 編集時に氏名欄をdisabledにするため、ここで必ず解除する。
+  // ※解除しないと一度「編集」した後の「指導者追加」で氏名を入力できない。
+  document.getElementById('m-name').disabled = false;
 }
 
 function fillMasterForm(inst) {

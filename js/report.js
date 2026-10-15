@@ -315,7 +315,13 @@ async function loadDraftReport() {
   const month = document.getElementById('target-month').value;
   if (!name || !year || !month) return;
 
+  // 対象年月を切り替えたら、前月の行と提出IDを必ず破棄する。
+  // ※残したままだと、データのない月に切り替えた際に前月の日付の行が
+  //   そのまま別月の月報として提出でき、同じ指導が二重に支給される。
   State.isSubmitted = false;
+  State.submitId    = null;
+  document.getElementById('report-tbody').innerHTML = '';
+  rowIndex = 0;
   updateSubmitButtonsUI();
 
   showLoading();
@@ -346,6 +352,11 @@ async function loadDraftReport() {
       updateTotals();
       updateSubmitButtonsUI();
       showToast('下書きデータを読み込みました', 'success');
+    } else {
+      // この月のデータは無い。空行1行だけの状態から入力を始める
+      addRow();
+      updateTotals();
+      updateSubmitButtonsUI();
     }
   } catch (e) {
     console.error('[loadDraftReport] エラー:', e);
@@ -662,6 +673,13 @@ function validate() {
       showToast('終了時刻は開始時刻より後にしてください', 'error');
       return false;
     }
+    // 日付が対象年月の範囲内か検証する（別月の実績が混入すると二重支給になる）
+    const ym = String(r.date).slice(0, 7);
+    const expected = year + '-' + String(month).padStart(2, '0');
+    if (ym !== expected) {
+      showToast('対象年月（' + year + '年' + month + '月）以外の日付が含まれています: ' + r.date, 'error');
+      return false;
+    }
   }
   return true;
 }
@@ -759,7 +777,9 @@ async function onConfirmSubmit() {
     const body = buildPostBody('submitReport');
     const res  = await gasPost(body);
     if (!res.success) throw new Error(res.error);
-    State.submitId = res.submitId;
+    State.submitId   = res.submitId;
+    State.isSubmitted = true;
+    updateSubmitButtonsUI();
     showCompleteSection();
   } catch (e) {
     showToast('提出に失敗しました: ' + e.message, 'error');
@@ -823,8 +843,10 @@ function updateSubmitButtonsUI() {
 function onResubmit() {
   if (!validate()) return;
   if (!confirm('提出済みのデータを上書きします。よろしいですか？')) return;
-  State.isSubmitted = false;
-  updateSubmitButtonsUI();
+  // ※ここで isSubmitted を降ろすと、確認画面から「戻って修正する」で
+  //   提出済バッジが消えて一時保存ボタンが復活し、提出済行を残したまま
+  //   下書き行が併存する（その後の修正が画面に出なくなる）。
+  //   実際に提出が成功した時点で更新する。
   onShowConfirm();
 }
 

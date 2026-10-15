@@ -1,4 +1,4 @@
-const CACHE_NAME = 'shidou-report-v11';
+const CACHE_NAME = 'shidou-report-v12';
 
 const PRECACHE_FILES = [
   './',
