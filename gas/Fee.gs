@@ -1402,3 +1402,98 @@ function getPaySlip(params) {
     }
   };
 }
+
+// ========== 手作業修正後の再計算（保守用） ==========
+
+/**
+ * シートを手作業で修正した後に、謝金を強制再計算する。
+ *
+ * 月報データを直接編集しても謝金は自動再計算されない（calcFee は提出時・
+ * 事務局修正時のみ実行される）ため、手修正後はこの関数で反映させる。
+ * 修正フラグが立っていても無視して再計算する。
+ *
+ * 使い方（エディタで引数を書き換えて実行）:
+ *   recalcFeeForce('髙畠　奈々恵', 2026, 9);
+ */
+function recalcFeeForce(instructorName, year, month) {
+  if (!instructorName) {
+    Logger.log('指導者氏名を指定してください。例: recalcFeeForce(\'氏名\', 2026, 9)');
+    return { success: false, error: '指導者氏名が必要です' };
+  }
+
+  const y = parseInt(year);
+  const m = parseInt(month);
+
+  // 再計算前の保存値を記録しておく（差額確認用）
+  const before = getExistingFeeResult(instructorName, y, m);
+  if (before) {
+    Logger.log('再計算前: 謝金=%s円 / 源泉=%s円 / 差引=%s円 / 修正フラグ=%s',
+      before.result.fee, before.result.withholding, before.result.netPay, before.isModified);
+  } else {
+    Logger.log('再計算前: 既存の計算結果なし');
+  }
+
+  const res = calcFee({ instructorName, year: y, month: m, forceRecalc: true });
+
+  if (!res.success) {
+    Logger.log('再計算失敗: %s', res.error);
+    return res;
+  }
+
+  Logger.log('再計算後: 謝金=%s円 / 源泉=%s円 / 差引=%s円',
+    res.result.fee, res.result.withholding, res.result.netPay);
+  Logger.log('対象時間: メイン=%sh / サブ=%sh / 合計=%sh',
+    res.result.mainCalcHours, res.result.subCalcHours, res.result.totalCalcHours);
+
+  if (res.result.duplicateCount > 0) {
+    Logger.log('※警告: 内容が完全一致する重複行を%s件除外して計算しました。', res.result.duplicateCount);
+  }
+
+  if (before) {
+    const diff = res.result.netPay - before.result.netPay;
+    Logger.log('差引支払額の差額: %s円 (%s)', diff, diff === 0 ? '変化なし' : (diff > 0 ? '増額' : '減額'));
+  }
+
+  return res;
+}
+
+/**
+ * 指定年月の全指導者について、月報の行数・合計時間を一覧でログ出力する（読み取り専用）
+ * 実際の指導実績との照合に使う。
+ *
+ * 使い方: auditMonthlyHours(2026, 9);
+ */
+function auditMonthlyHours(year, month) {
+  const y = parseInt(year) || new Date().getFullYear();
+  const m = parseInt(month) || (new Date().getMonth() + 1);
+
+  const sheet = getOrCreateReportSheet(y);
+  const data = sheet.getDataRange().getValues().slice(1);
+
+  const agg = {};
+  data.forEach(row => {
+    if (parseInt(row[COL.YEAR]) !== y) return;
+    if (parseInt(row[COL.MONTH]) !== m) return;
+    if (String(row[COL.STATUS]).trim() !== '提出済') return;
+
+    const name = String(row[COL.INSTRUCTOR_NAME]).trim();
+    if (!agg[name]) agg[name] = { rows: 0, dates: {}, hours: 0 };
+    agg[name].rows++;
+    agg[name].dates[sheetDateToString(row[COL.DATE])] = true;
+    agg[name].hours += parseFloat(row[COL.CALC_HOURS]) || 0;
+  });
+
+  Logger.log('========== %s年%s月 提出済み月報の集計 ==========', y, m);
+  Logger.log('氏名 / 行数 / 実日数 / 謝金計算時間合計');
+  Object.keys(agg).sort().forEach(name => {
+    const a = agg[name];
+    const dayCount = Object.keys(a.dates).length;
+    Logger.log('%s / %s行 / %s日 / %sh%s',
+      name, a.rows, dayCount, Math.round(a.hours * 100) / 100,
+      a.rows > dayCount ? '  ← 同じ日に複数行あり（メイン/サブ・別コマなら正常）' : '');
+  });
+  Logger.log('※行数が実日数より多い場合、メイン/サブの2行や別コマなら正常です。');
+  Logger.log('※実際の指導実績と実日数が合わない指導者がいれば、その月の行を確認してください。');
+
+  return { success: true, year: y, month: m, data: agg };
+}
