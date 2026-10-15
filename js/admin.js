@@ -183,6 +183,25 @@ function jumpToDetail(name) {
 
 // ========== 月報詳細 ==========
 
+// 月報明細を日付の昇順（同日は開始時刻順）に並べ替えた新しい配列を返す。
+// シートの行順は提出順なので、表示・印刷・修正画面では日付順に揃える。
+// ※同一日にメイン/サブの2行や別コマが並ぶのは正当なため、
+//   同日内は開始時刻で安定した順序にするだけで、行を除外してはならない。
+function sortRowsByDate(rows) {
+  return (rows || []).slice().sort((a, b) => {
+    const da = String(a.date || '');
+    const db = String(b.date || '');
+    if (da !== db) {
+      if (!da) return 1;   // 日付なしは末尾
+      if (!db) return -1;
+      return da < db ? -1 : 1;
+    }
+    const sa = String(a.startTime || '');
+    const sb = String(b.startTime || '');
+    return sa < sb ? -1 : (sa > sb ? 1 : 0);
+  });
+}
+
 // 個人表示と一括印刷で共有する行HTML生成ヘルパー
 function buildDetailRowHTML(r) {
   return `<tr>
@@ -218,11 +237,11 @@ async function loadDetail() {
       return;
     }
 
-    // 生データを保存（月報修正で使用）
-    AdminState.currentDetailRows = res.data;
+    // 生データを日付順に保存（月報修正画面もこの順序を使う）
+    AdminState.currentDetailRows = sortRowsByDate(res.data);
 
     // メタ情報
-    const first = res.data[0];
+    const first = AdminState.currentDetailRows[0];
     document.getElementById('detail-meta').innerHTML = `
       <div class="detail-meta-item"><span class="detail-meta-label">指導者</span><span class="detail-meta-value">${esc(first.instructorName)}</span></div>
       <div class="detail-meta-item"><span class="detail-meta-label">クラブ名</span><span class="detail-meta-value">${esc(first.clubName)}</span></div>
@@ -234,7 +253,8 @@ async function loadDetail() {
     `;
 
     // 明細テーブル
-    document.getElementById('detail-tbody').innerHTML = res.data.map(buildDetailRowHTML).join('');
+    document.getElementById('detail-tbody').innerHTML =
+      AdminState.currentDetailRows.map(buildDetailRowHTML).join('');
 
     // 謝金計算結果
     await loadDetailFee(name, year, month);
@@ -772,7 +792,7 @@ async function printAllReports() {
     const reportHTMLs = reportResults
       .filter(res => res.success && res.data && res.data.length > 0)
       .map(res => {
-        const rows  = res.data;
+        const rows  = sortRowsByDate(res.data);
         const first = rows[0];
         const inst  = AdminState.instructors.find(i => (i['氏名'] || i.name) === first.instructorName) || {};
         const feeData = feeMap[first.instructorName] || null;
