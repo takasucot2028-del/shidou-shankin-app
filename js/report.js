@@ -992,16 +992,36 @@ async function gasGet(params) {
   return res.json();
 }
 
+/**
+ * POST通信。GASの仕様上まれに起きる「POSTがGETとして処理される」ケースを再送する。
+ *
+ * この現象が起きたとき、サーバーは getNotAllowed を返す。これは doGet に
+ * 着弾したという意味で、アクションは一切実行されていない。副作用が出ていない
+ * ことが確定しているため、再送しても二重登録・二重送信は起きない。
+ * 逆に、通信エラーやタイムアウトは「実行されたかどうか不明」なので再送しない。
+ */
 async function gasPost(body) {
-  // Content-Type を text/plain にすることでプリフライトを回避
-  const res = await fetch(Config.GAS_URL, {
-    method:   'POST',
-    redirect: 'follow',
-    headers:  { 'Content-Type': 'text/plain;charset=UTF-8' },
-    body:     JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.json();
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAYS = [600, 1800];   // ミリ秒
+
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(Config.GAS_URL, {
+      method:   'POST',
+      redirect: 'follow',
+      // Content-Type を text/plain にすることでプリフライトを回避
+      headers:  { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body:     JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    const json = await res.json();
+    if (!json || !json.getNotAllowed || attempt >= MAX_ATTEMPTS) return json;
+
+    const wait = RETRY_DELAYS[attempt - 1] || 1800;
+    console.warn('[gasPost] POSTがGETとして処理されたため再送します (' +
+      attempt + '/' + (MAX_ATTEMPTS - 1) + ', ' + wait + 'ms後): ' + body.action);
+    await new Promise(ok => setTimeout(ok, wait));
+  }
 }
 
 // ========== ユーティリティ ==========

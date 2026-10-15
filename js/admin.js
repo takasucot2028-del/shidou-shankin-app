@@ -1734,14 +1734,26 @@ async function saveReportEdit() {
  * Content-Type を text/plain にすることでプリフライトを回避する
  */
 async function gasPostRaw(body) {
-  const res = await fetch(Config.GAS_URL, {
-    method:   'POST',
-    redirect: 'follow',
-    headers:  { 'Content-Type': 'text/plain;charset=UTF-8' },
-    body:     JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.json();
+  const MAX_ATTEMPTS = 3;
+  const RETRY_DELAYS = [600, 1800];   // ミリ秒
+
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(Config.GAS_URL, {
+      method:   'POST',
+      redirect: 'follow',
+      headers:  { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body:     JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    const json = await res.json();
+    if (!json || !json.getNotAllowed || attempt >= MAX_ATTEMPTS) return json;
+
+    const wait = RETRY_DELAYS[attempt - 1] || 1800;
+    console.warn('[gasPostRaw] POSTがGETとして処理されたため再送します (' +
+      attempt + '/' + (MAX_ATTEMPTS - 1) + ', ' + wait + 'ms後): ' + body.action);
+    await new Promise(ok => setTimeout(ok, wait));
+  }
 }
 
 /**
