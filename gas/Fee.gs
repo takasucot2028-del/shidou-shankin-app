@@ -57,7 +57,7 @@ function calcFee(body, skipDelete) {
     String(row[COL.INSTRUCTOR_NAME]).trim() === String(instructorName).trim() &&
     parseInt(row[COL.YEAR]) === year &&
     parseInt(row[COL.MONTH]) === month &&
-    row[COL.STATUS] === '提出済'
+    String(row[COL.STATUS]).trim() === '提出済'
   );
 
   Logger.log('[calcFee] 対象月報行数: %s', rows.length);
@@ -131,7 +131,55 @@ function updateFee(body) {
 /**
  * 1指導者分の月間謝金を計算する
  */
+/**
+ * 謝金計算の対象行から、内容が完全一致する重複行を除外する。
+ *
+ * 判定キー: 日付・区分・時給区分・開始時刻・終了時刻・交通手段・場所・旅費金額・備考
+ *
+ * ※日付だけで重複判定してはならない。同一指導者が同じ日にメインとサブの
+ *   両方で登録されるケース（バドミントン少年団など）や、同じ日の別コマ
+ *   （時刻違い）は正当な別行であり、落とすと過少払いになる。
+ */
+function dedupeFeeRows(rows) {
+  const seen = {};
+  const unique = [];
+  let duplicateCount = 0;
+
+  rows.forEach(row => {
+    const key = [
+      sheetDateToString(row[COL.DATE]),
+      String(row[COL.CATEGORY]).trim(),
+      String(row[COL.RATE_TYPE]).trim(),
+      sheetTimeToString(row[COL.START_TIME]),
+      sheetTimeToString(row[COL.END_TIME]),
+      String(row[COL.TRANSPORT]).trim(),
+      String(row[COL.DESTINATION]).trim(),
+      Number(row[COL.TRAVEL_AMOUNT]) || 0,
+      String(row[COL.NOTE]).trim(),
+    ].join('|');
+
+    if (seen[key]) {
+      duplicateCount++;
+      Logger.log('[dedupeFeeRows] 重複行を除外: key="%s"', key);
+      return;
+    }
+    seen[key] = true;
+    unique.push(row);
+  });
+
+  return { rows: unique, duplicateCount };
+}
+
 function computeFee(rows, instructor) {
+  // 同内容の重複行が残っていると同じ日が二重計上されるため、集計前に除外する
+  const deduped = dedupeFeeRows(rows);
+  const duplicateCount = deduped.duplicateCount;
+  if (duplicateCount > 0) {
+    Logger.log('[computeFee] 警告: 重複行を%s件除外しました（指導者="%s"）',
+               duplicateCount, instructor.name || '');
+  }
+  rows = deduped.rows;
+
   let totalCalcHours = 0;
   let mainCalcHours = 0;
   let subCalcHours = 0;
@@ -189,6 +237,7 @@ function computeFee(rows, instructor) {
     withholding,
     netPay,
     travelTotal,
+    duplicateCount,
   };
 }
 
@@ -423,7 +472,7 @@ function calcAllFees(body) {
   reportData.forEach(row => {
     if (parseInt(row[COL.YEAR]) === year &&
         parseInt(row[COL.MONTH]) === month &&
-        row[COL.STATUS] === '提出済') {
+        String(row[COL.STATUS]).trim() === '提出済') {
       nameSet[String(row[COL.INSTRUCTOR_NAME]).trim()] = true;
     }
   });
@@ -495,7 +544,7 @@ function calcAllFees(body) {
       String(row[COL.INSTRUCTOR_NAME]).trim() === name &&
       parseInt(row[COL.YEAR]) === year &&
       parseInt(row[COL.MONTH]) === month &&
-      row[COL.STATUS] === '提出済'
+      String(row[COL.STATUS]).trim() === '提出済'
     );
 
     if (rows.length === 0) return;
@@ -1011,7 +1060,7 @@ function generateCategorySummarySheet(body) {
   const rows = reportData.filter(row =>
     parseInt(row[COL.YEAR]) === year &&
     parseInt(row[COL.MONTH]) === month &&
-    row[COL.STATUS] === '提出済'
+    String(row[COL.STATUS]).trim() === '提出済'
   );
 
   if (rows.length === 0) {

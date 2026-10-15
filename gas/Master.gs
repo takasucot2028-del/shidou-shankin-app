@@ -35,11 +35,11 @@ function getInstructors() {
 function findInstructor(name) {
   const sheet = getSheet('指導者マスタ');
   const data = sheet.getDataRange().getValues().slice(1);
-  const row = data.find(r => r[1] === name);
+  const row = data.find(r => String(r[1]).trim() === String(name).trim());
   if (!row) return null;
   return {
     no: row[0],
-    name: row[1],
+    name: String(row[1]).trim(),
     clubName: row[2],
     rateType: row[3],       // メイン / サブ
     type: row[4],           // 教員 / 一般
