@@ -70,7 +70,7 @@ function getJPHolidaySetForYear(year) {
 function isJPHolidayKey(key) {
   if (!key) return false;
   const s = String(key).trim();
-  const m = s.match(/^(d{4})-(d{2})-(d{2})/);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return false;
   return getJPHolidaySetForYear(Number(m[1])).has(m[1] + '-' + m[2] + '-' + m[3]);
 }
