@@ -261,25 +261,37 @@ function isTeacherCutTarget(category, dateValue) {
   if (cat === '平日') return true;
   if (cat !== '長期休暇') return false;
 
-  const day = weekdayIndexOf(dateValue);
-  if (day === null) return true;      // 日付不明なら従来どおり控除する
-  return day !== 0 && day !== 6;      // 日曜(0)・土曜(6)は控除しない
+  const d = parseDateValue(dateValue);
+  if (d === null) return true;        // 日付不明なら従来どおり控除する
+  const day = d.getDay();
+  if (day === 0 || day === 6) return false;   // 土日は控除しない
+  if (isJapaneseHoliday(d)) return false;     // 祝日も土日と同じ扱い
+  return true;
+}
+
+// 祝日Setは年ごとにキャッシュする（行ごとに作り直すと重い）
+var __holidayCache = {};
+
+/**
+ * 日付が日本の祝日（振替休日を含む）かを判定する。
+ * 祝日の定義は Notify.gs の getJPHolidaySet を再利用する。
+ */
+function isJapaneseHoliday(d) {
+  const y = d.getFullYear();
+  if (!__holidayCache[y]) __holidayCache[y] = getJPHolidaySet(y);
+  return __holidayCache[y].has(y + '-' + (d.getMonth() + 1) + '-' + d.getDate());
 }
 
 /**
- * 日付値（Date / "yyyy-MM-dd" 文字列）から曜日番号(0=日〜6=土)を返す。
- * 判定できない場合は null。
+ * 日付値（Date / "yyyy-MM-dd" 文字列）を Date に変換する。判定不能なら null。
  */
-function weekdayIndexOf(dateValue) {
+function parseDateValue(dateValue) {
   if (!dateValue) return null;
-  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue.getDay();
-
-  const s = String(dateValue).trim();
-  const m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue;
+  const m = String(dateValue).trim().match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
   if (!m) return null;
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  if (isNaN(d.getTime())) return null;
-  return d.getDay();
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function calcInstructionHours(startTime, endTime, category, instructorType, dateValue) {

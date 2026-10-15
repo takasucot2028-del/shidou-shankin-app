@@ -6,23 +6,74 @@
 
 const WEEKDAY_NAMES = ['日', '月', '火', '水', '木', '金', '土'];
 
-const JAPAN_HOLIDAYS = new Set([
-  // 2025
-  '2025-01-01','2025-01-13','2025-02-11','2025-02-23','2025-02-24',
-  '2025-03-20','2025-04-29','2025-05-03','2025-05-04','2025-05-05','2025-05-06',
-  '2025-07-21','2025-08-11','2025-09-15','2025-09-23','2025-10-13',
-  '2025-11-03','2025-11-23','2025-11-24',
-  // 2026
-  '2026-01-01','2026-01-12','2026-02-11','2026-02-23',
-  '2026-03-20','2026-04-29','2026-05-03','2026-05-04','2026-05-05','2026-05-06',
-  '2026-07-20','2026-08-11','2026-09-21','2026-09-23','2026-10-12',
-  '2026-11-03','2026-11-23',
-  // 2027
-  '2027-01-01','2027-01-11','2027-02-11','2027-02-23',
-  '2027-03-21','2027-03-22','2027-04-29','2027-05-03','2027-05-04','2027-05-05',
-  '2027-07-19','2027-08-11','2027-09-20','2027-09-23','2027-10-11',
-  '2027-11-03','2027-11-23',
-]);
+/**
+ * 祝日は年から計算する。
+ *
+ * ※以前は2027年までの固定リストだったため、2028年以降は祝日が0件になり、
+ *   指導者画面の概算（教員の長期休暇の扱い・曜日表示）がGAS側の確定値と
+ *   ズレる状態だった。GAS側 getJPHolidaySet / 事務局画面 getJPHolidays と
+ *   同一ロジックに揃えている。3実装のいずれかだけを変更しないこと。
+ */
+const __jpHolidayCache = {};
+
+function getJPHolidaySetForYear(year) {
+  if (__jpHolidayCache[year]) return __jpHolidayCache[year];
+
+  const p = n => String(n).padStart(2, '0');
+  const set = new Set();
+  const add = (m, d) => set.add(year + '-' + p(m) + '-' + p(d));
+
+  const shunbun = Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  const shubun  = Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+  const nthMon = (m, n) => {
+    const d = new Date(year, m - 1, 1);
+    let c = 0;
+    for (;;) {
+      if (d.getDay() === 1) { c++; if (c === n) return d.getDate(); }
+      d.setDate(d.getDate() + 1);
+    }
+  };
+
+  add(1, 1);
+  add(2, 11);
+  if (year >= 2020) add(2, 23);
+  add(3, shunbun);
+  add(4, 29);
+  add(5, 3); add(5, 4); add(5, 5);
+  add(8, 11);
+  add(9, shubun);
+  add(11, 3);
+  add(11, 23);
+  add(1,  nthMon(1,  2));
+  add(7,  nthMon(7,  3));
+  add(9,  nthMon(9,  3));
+  add(10, nthMon(10, 2));
+
+  // 振替休日：祝日が日曜なら翌月曜（既存祝日と重なれば更に翌日）
+  const key2date = k => { const q = k.split('-'); return new Date(Number(q[0]), Number(q[1]) - 1, Number(q[2])); };
+  const toKey = d => d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  Array.from(set).forEach(k => {
+    const d = key2date(k);
+    if (d.getDay() === 0) {
+      const sub = new Date(d);
+      sub.setDate(sub.getDate() + 1);
+      while (set.has(toKey(sub))) sub.setDate(sub.getDate() + 1);
+      set.add(toKey(sub));
+    }
+  });
+
+  __jpHolidayCache[year] = set;
+  return set;
+}
+
+/** "yyyy-MM-dd" 形式の日付が祝日かを返す */
+function isJPHolidayKey(key) {
+  if (!key) return false;
+  const s = String(key).trim();
+  const m = s.match(/^(d{4})-(d{2})-(d{2})/);
+  if (!m) return false;
+  return getJPHolidaySetForYear(Number(m[1])).has(m[1] + '-' + m[2] + '-' + m[3]);
+}
 
 // ========== 状態 ==========
 const State = {
@@ -563,18 +614,24 @@ function isTeacherCutTargetRow(category, dateValue) {
   if (cat === '平日') return true;
   if (cat !== '長期休暇') return false;
 
-  const day = weekdayIndexOfValue(dateValue);
-  if (day === null) return true;      // 日付不明なら従来どおり控除する
-  return day !== 0 && day !== 6;      // 日曜(0)・土曜(6)は控除しない
+  const d = parseDateValueRow(dateValue);
+  if (d === null) return true;        // 日付不明なら従来どおり控除する
+  const day = d.getDay();
+  if (day === 0 || day === 6) return false;   // 土日は控除しない
+  // 祝日も土日と同じ扱い
+  const p = n => String(n).padStart(2, '0');
+  const key = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  if (isJPHolidayKey(key)) return false;
+  return true;
 }
 
-function weekdayIndexOfValue(dateValue) {
+function parseDateValueRow(dateValue) {
   if (!dateValue) return null;
-  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue.getDay();
-  const m = String(dateValue).trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue;
+  const m = String(dateValue).trim().match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
   if (!m) return null;
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return isNaN(d.getTime()) ? null : d.getDay();
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function calcInstructionHours(startTime, endTime, category, instructorType, dateValue) {
@@ -1344,7 +1401,7 @@ function updateWeekdayLabel(tr) {
   }
 
   const dow       = d.getDay();
-  const isHoliday = JAPAN_HOLIDAYS.has(dateVal);
+  const isHoliday = isJPHolidayKey(dateVal);
   span.textContent = '(' + WEEKDAY_NAMES[dow] + ')';
 
   let cls = 'weekday-label';
@@ -1379,7 +1436,7 @@ function onPrintReport() {
     const d        = r.date ? new Date(r.date + 'T00:00:00') : null;
     const dow      = d ? d.getDay() : -1;
     const wday     = d ? '(' + WEEKDAY_NAMES[dow] + ')' : '';
-    const isHol    = r.date ? JAPAN_HOLIDAYS.has(r.date) : false;
+    const isHol    = r.date ? isJPHolidayKey(r.date) : false;
     const dateDisp = r.date ? r.date.slice(5).replace('-', '/') : '';
 
     let dateColor = '';

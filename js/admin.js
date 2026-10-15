@@ -1483,18 +1483,31 @@ function isAdminTeacherCutTarget(category, dateValue) {
   const cat = String(category).trim();
   if (cat === '平日') return true;
   if (cat !== '長期休暇') return false;
-  const day = adminWeekdayIndexOf(dateValue);
-  if (day === null) return true;
-  return day !== 0 && day !== 6;
+
+  const d = adminParseDateValue(dateValue);
+  if (d === null) return true;        // 日付不明なら従来どおり控除する
+  const day = d.getDay();
+  if (day === 0 || day === 6) return false;   // 土日は控除しない
+  if (adminIsHoliday(d)) return false;        // 祝日も土日と同じ扱い
+  return true;
 }
 
-function adminWeekdayIndexOf(dateValue) {
+// 祝日Setは年ごとにキャッシュする
+const __adminHolidayCache = {};
+
+function adminIsHoliday(d) {
+  const y = d.getFullYear();
+  if (!__adminHolidayCache[y]) __adminHolidayCache[y] = getJPHolidays(y);
+  return __adminHolidayCache[y].has(d.toDateString());
+}
+
+function adminParseDateValue(dateValue) {
   if (!dateValue) return null;
-  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue.getDay();
-  const m = String(dateValue).trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (dateValue instanceof Date && !isNaN(dateValue.getTime())) return dateValue;
+  const m = String(dateValue).trim().match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
   if (!m) return null;
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return isNaN(d.getTime()) ? null : d.getDay();
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function calcAdminInstructionHours(startTime, endTime, category, instructorType, dateValue) {
