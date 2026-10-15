@@ -147,6 +147,9 @@ function dedupeFeeRows(rows) {
 
   rows.forEach(row => {
     const key = [
+      String(row[COL.INSTRUCTOR_NAME]).trim(),
+      parseInt(row[COL.YEAR]),
+      parseInt(row[COL.MONTH]),
       sheetDateToString(row[COL.DATE]),
       String(row[COL.CATEGORY]).trim(),
       String(row[COL.RATE_TYPE]).trim(),
@@ -194,8 +197,9 @@ function computeFee(rows, instructor) {
   };
 
   rows.forEach(row => {
-    const category = row[COL.CATEGORY];
-    const rateType = row[COL.RATE_TYPE];
+    // 区分・時給区分もtrimする。未trimだと区分は0円、時給区分はサブ単価に落ちる
+    const category = String(row[COL.CATEGORY]).trim();
+    const rateType = String(row[COL.RATE_TYPE]).trim();
     const startTime = row[COL.START_TIME];
     const endTime = row[COL.END_TIME];
     const travelAmount = parseFloat(row[COL.TRAVEL_AMOUNT]) || 0;
@@ -252,9 +256,17 @@ function calcInstructionHours(startTime, endTime, category, instructorType) {
 
   let effectiveMinutes;
 
+  // 区分はtrimして判定する。
+  // ※空白が混入すると MAX_HOURS が引けず上限0分＝0円になり、警告もなく払い漏れる。
+  const cat = String(category).trim();
+  if (cat && !MAX_HOURS.hasOwnProperty(cat)) {
+    Logger.log('[calcInstructionHours] 警告: 未知の区分 "%s" のため上限0時間（0円）として計算します。' +
+               '区分は 平日/休日/長期休暇/大会引率 のいずれかである必要があります。', cat);
+  }
+
   // 教員かつ平日・長期休暇は16:40以降のみ有効
-  const isTeacher = instructorType === '教員';
-  const isWeekdayOrLongVacation = category === '平日' || category === '長期休暇';
+  const isTeacher = String(instructorType).trim() === '教員';
+  const isWeekdayOrLongVacation = cat === '平日' || cat === '長期休暇';
 
   if (isTeacher && isWeekdayOrLongVacation) {
     const effectiveStart = Math.max(startMin, TEACHER_WORK_END_MINUTES);
@@ -263,7 +275,7 @@ function calcInstructionHours(startTime, endTime, category, instructorType) {
     effectiveMinutes = endMin - startMin;
   }
 
-  const maxMinutes = (MAX_HOURS[category] || 0) * 60;
+  const maxMinutes = (MAX_HOURS[cat] || 0) * 60;
   const cappedMinutes = Math.min(effectiveMinutes, maxMinutes);
 
   // 15分単位切捨
@@ -549,12 +561,19 @@ function calcAllFees(body) {
 
     if (rows.length === 0) return;
 
+    // 一括計算でも重複行を除外する（calcFee 経路と金額を一致させる）
+    const dedupedAll = dedupeFeeRows(rows);
+    if (dedupedAll.duplicateCount > 0) {
+      Logger.log('[calcAllFees] 警告: 指導者="%s" の重複行を%s件除外しました', name, dedupedAll.duplicateCount);
+    }
+    const dedupedRows = dedupedAll.rows;
+
     let mainCalcHours = 0;
     let subCalcHours = 0;
     let travelTotal = 0;
     const categoryHours = { '平日': 0, '休日': 0, '長期休暇': 0, '大会引率': 0 };
 
-    rows.forEach(row => {
+    dedupedRows.forEach(row => {
       const calcHours = calcInstructionHours(
         row[COL.START_TIME],
         row[COL.END_TIME],
@@ -566,9 +585,10 @@ function calcAllFees(body) {
       const key = String(row[COL.SUBMIT_ID]) + '|' + String(row[COL.DATE]);
       reportCalcHoursMap[key] = calcHours;
 
-      categoryHours[row[COL.CATEGORY]] = (categoryHours[row[COL.CATEGORY]] || 0) + calcHours;
+      const cat2 = String(row[COL.CATEGORY]).trim();
+      categoryHours[cat2] = (categoryHours[cat2] || 0) + calcHours;
 
-      if (row[COL.RATE_TYPE] === 'メイン') {
+      if (String(row[COL.RATE_TYPE]).trim() === 'メイン') {
         mainCalcHours += calcHours;
       } else {
         subCalcHours += calcHours;
@@ -700,8 +720,11 @@ function generateTransferSheet(body) {
   const masterSheet = getSheet('指導者マスタ');
   const masterData = masterSheet.getDataRange().getValues().slice(1);
   const masterMap = {};
+  // 氏名は trim してキー化する。
+  // ※謝金計算結果には trim 済み氏名が書かれるため、未 trim キーだと照合に
+  //   失敗し、金融機関・口座番号が空欄のまま振込データが出力される。
   masterData.forEach(row => {
-    if (row[1]) masterMap[row[1]] = row;
+    if (row[1]) masterMap[String(row[1]).trim()] = row;
   });
 
   // 差引支払額 > 0 の行のみ抽出・結合
@@ -710,7 +733,7 @@ function generateTransferSheet(body) {
     const netPay = parseFloat(row[11]) || 0;
     if (netPay <= 0) return;
 
-    const name = row[1];
+    const name = String(row[1]).trim();
     const master = masterMap[name];
     outputRows.push([
       '',                          // A: No（後で連番付与）
@@ -838,7 +861,7 @@ function cleanupFeeResults() {
   // キー(氏名+年月) → 最新行インデックス(1-based)を収集
   const latestRow = {}; // key → { rowIndex, calcDate }
   for (let i = 1; i < data.length; i++) {
-    const name = data[i][1];
+    const name = String(data[i][1]).trim();
     const ymRaw = data[i][2];
     const calcDate = data[i][13] instanceof Date ? data[i][13] : new Date(data[i][13] || 0);
     const key = name + '|' + (ymRaw instanceof Date
@@ -1067,6 +1090,13 @@ function generateCategorySummarySheet(body) {
     return { success: false, error: '対象年月の提出済み月報がありません: ' + ymLabel };
   }
 
+  // 区分別集計でも重複行を除外する（キーに氏名・年・月を含むため複数指導者をまとめて渡せる）
+  const dedupedCategory = dedupeFeeRows(rows);
+  if (dedupedCategory.duplicateCount > 0) {
+    Logger.log('[generateCategorySummarySheet] 警告: 重複行を%s件除外しました', dedupedCategory.duplicateCount);
+  }
+  const dedupedCategoryRows = dedupedCategory.rows;
+
   // 指導者マスタをマップ化（氏名 → {clubName, type}）
   const masterSheet = getSheet('指導者マスタ');
   const masterRows = masterSheet.getDataRange().getValues().slice(1);
@@ -1090,11 +1120,11 @@ function generateCategorySummarySheet(body) {
 
   // 指導者ごとに区分×時給区分の謝金計算時間を集計
   const perInstructor = {}; // name → { category → { main, sub } }
-  rows.forEach(row => {
+  dedupedCategoryRows.forEach(row => {
     const name = String(row[COL.INSTRUCTOR_NAME]).trim();
     const inst = instructorMap[name];
     if (!inst) return; // マスタ未登録はスキップ
-    const category = row[COL.CATEGORY];
+    const category = String(row[COL.CATEGORY]).trim();
     if (CATEGORIES.indexOf(category) === -1) return;
 
     const calcHours = calcInstructionHours(
@@ -1105,7 +1135,7 @@ function generateCategorySummarySheet(body) {
       perInstructor[name] = {};
       CATEGORIES.forEach(c => { perInstructor[name][c] = { main: 0, sub: 0 }; });
     }
-    if (row[COL.RATE_TYPE] === 'メイン') {
+    if (String(row[COL.RATE_TYPE]).trim() === 'メイン') {
       perInstructor[name][category].main += calcHours;
     } else {
       perInstructor[name][category].sub += calcHours;
@@ -1471,6 +1501,7 @@ function auditMonthlyHours(year, month) {
   const data = sheet.getDataRange().getValues().slice(1);
 
   const agg = {};
+  const typeCache = {};   // 氏名 → 指導者種別（マスタ参照の繰り返しを避ける）
   data.forEach(row => {
     if (parseInt(row[COL.YEAR]) !== y) return;
     if (parseInt(row[COL.MONTH]) !== m) return;
@@ -1480,7 +1511,16 @@ function auditMonthlyHours(year, month) {
     if (!agg[name]) agg[name] = { rows: 0, dates: {}, hours: 0 };
     agg[name].rows++;
     agg[name].dates[sheetDateToString(row[COL.DATE])] = true;
-    agg[name].hours += parseFloat(row[COL.CALC_HOURS]) || 0;
+
+    // 謝金計算時間はシートのL列を信用せず、開始・終了時刻から再計算する。
+    // ※L列の書き込みは「提出ID＋日付」で行を特定しており、同一日にメイン/サブの
+    //   2行がある場合に片方へ上書きされるため、合計が実態とズレる。
+    if (!typeCache.hasOwnProperty(name)) {
+      const inst = findInstructor(name);
+      typeCache[name] = inst ? inst.type : '一般';
+    }
+    agg[name].hours += calcInstructionHours(
+      row[COL.START_TIME], row[COL.END_TIME], row[COL.CATEGORY], typeCache[name]);
   });
 
   Logger.log('========== %s年%s月 提出済み月報の集計 ==========', y, m);
